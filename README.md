@@ -13,6 +13,8 @@ ChatGPT's sidebar, but self-built end to end.
 - Auto-naming of sessions from the first message
 - Model picker — switch between `llama-3.1-8b-instant` (fast) and
   `llama-3.3-70b-versatile` (stronger reasoning)
+- Optional live web search (via Tavily) toggle — grounds answers in current
+  information instead of relying solely on the model's training cutoff
 - Custom dark UI design (not a default Streamlit theme)
 - SQLite-backed persistence
 

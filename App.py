@@ -1,6 +1,7 @@
 import streamlit as st
 import db
 import llm
+import search
 
 st.set_page_config(page_title="Assistant", page_icon="●", layout="wide")
 
@@ -196,6 +197,10 @@ with st.sidebar:
     )
     st.session_state.selected_model = selected_model
 
+    st.markdown("---")
+    web_search_enabled = st.checkbox("🔍 Enable web search", value=False)
+    st.session_state.web_search_enabled = web_search_enabled
+
 # ---------- Main chat area ----------
 st.markdown("## Assistant")
 st.caption("Multi-turn chatbot — Groq + SQLite persistence, multiple named sessions.")
@@ -224,9 +229,17 @@ if prompt := st.chat_input("Type a message..."):
     api_messages = [{"role": m["role"], "content": m["content"]} for m in full_history]
 
     with st.chat_message("assistant"):
+        search_context = None
+        if st.session_state.get("web_search_enabled"):
+            with st.spinner("Searching the web..."):
+                search_context = search.search_web(prompt)
         with st.spinner("Thinking..."):
             try:
-                reply = llm.get_response(api_messages, model=st.session_state.selected_model)
+                reply = llm.get_response(
+                    api_messages,
+                    model=st.session_state.selected_model,
+                    search_context=search_context,
+                )
             except Exception as e:
                 reply = f"⚠️ Error calling Groq API: {e}"
         st.write(reply)

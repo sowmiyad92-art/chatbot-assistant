@@ -1,3 +1,5 @@
 streamlit
 groq
 python-dotenv
+psycopg2-binary
+tavily-python

@@ -26,12 +26,20 @@ SYSTEM_PROMPT = (
 )
 
 
-def get_response(messages, model=DEFAULT_MODEL):
+def get_response(messages, model=DEFAULT_MODEL, search_context=None):
     """
     messages: list of {"role": "user"/"assistant", "content": "..."}
+    search_context: optional string of fresh web search results to ground the answer
     Returns the assistant's reply as a string.
     """
-    chat_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
+    system_content = SYSTEM_PROMPT
+    if search_context:
+        system_content += (
+            "\n\nYou have been given the following up-to-date web search results. "
+            "Use them to answer the user's latest question if relevant, and mention "
+            "that this reflects current web information:\n\n" + search_context
+        )
+    chat_messages = [{"role": "system", "content": system_content}] + messages
     completion = client.chat.completions.create(
         model=model,
         messages=chat_messages,
