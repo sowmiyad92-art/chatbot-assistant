@@ -203,7 +203,7 @@ with st.sidebar:
 
 # ---------- Main chat area ----------
 st.markdown("## Assistant")
-st.caption("Multi-turn chatbot — Groq + SQLite persistence, multiple named sessions.")
+st.caption("Multi-turn chatbot — Groq + Supabase persistence, multiple named sessions, live web search.")
 
 session_id = st.session_state.current_session_id
 history = db.get_session_messages(session_id)
