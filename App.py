@@ -370,6 +370,12 @@ for i, msg in enumerate(history):
             st.markdown(f'<span class="model-badge" title="groq/{model_for_badge}">{model_label}</span>', unsafe_allow_html=True)
 
             safe_text = msg["content"].replace("\\", "\\\\").replace("`", "'").replace("\n", "\\n").replace('"', '\\"')
+            html_escaped_content = (
+                msg["content"]
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+            )
             components.html(f"""
                 <style>
                   body {{ margin: 0; }}
@@ -385,7 +391,29 @@ for i, msg in enumerate(history):
                   }}
                   .copy-btn:hover {{ color: #E8E6E0; border-color: #6FA8AF; }}
                 </style>
-                <button class="copy-btn" onclick="navigator.clipboard.writeText(&quot;{safe_text}&quot;); this.innerText='copied';">copy</button>
+                <button class="copy-btn" id="copyBtn">copy</button>
+                <textarea id="copySource" style="position:absolute; left:-9999px;">{html_escaped_content}</textarea>
+                <script>
+                  document.getElementById("copyBtn").addEventListener("click", function() {{
+                    const btn = this;
+                    const text = document.getElementById("copySource").value;
+                    function fallbackCopy() {{
+                      const ta = document.getElementById("copySource");
+                      ta.style.left = "0px";
+                      ta.focus();
+                      ta.select();
+                      try {{ document.execCommand("copy"); }} catch (e) {{}}
+                      ta.style.left = "-9999px";
+                    }}
+                    if (navigator.clipboard && navigator.clipboard.writeText) {{
+                      navigator.clipboard.writeText(text).catch(fallbackCopy);
+                    }} else {{
+                      fallbackCopy();
+                    }}
+                    btn.innerText = "copied";
+                    setTimeout(function() {{ btn.innerText = "copy"; }}, 1500);
+                  }});
+                </script>
             """, height=32)
 
 if prompt := st.chat_input("Type a message..."):
