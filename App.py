@@ -304,8 +304,15 @@ with st.sidebar:
     st.session_state.selected_model = selected_model
 
     st.markdown("---")
-    web_search_enabled = st.checkbox("🔍 Enable web search", value=False)
-    st.session_state.web_search_enabled = web_search_enabled
+    web_search_mode = st.radio(
+        "🔍 Web search",
+        options=["Auto", "Always", "Off"],
+        index=0,
+        horizontal=True,
+        help="Auto: Groq decides per-question if live search is needed (saves Tavily credits). "
+             "Always: search every message. Off: never search.",
+    )
+    st.session_state.web_search_mode = web_search_mode
 
     st.markdown("---")
     with st.expander("⚙ Settings"):
@@ -429,7 +436,17 @@ if prompt := st.chat_input("Type a message..."):
 
     with st.chat_message("assistant"):
         search_results = None
-        if st.session_state.get("web_search_enabled"):
+        mode = st.session_state.get("web_search_mode", "Auto")
+
+        should_search = False
+        if mode == "Always":
+            should_search = True
+        elif mode == "Auto":
+            with st.spinner("Checking if this needs live data..."):
+                should_search = llm.needs_search(prompt)
+        # mode == "Off" -> should_search stays False
+
+        if should_search:
             with st.spinner("Searching the web..."):
                 search_results = search.search_web(prompt)
                 st.session_state.tavily_search_count += 1
