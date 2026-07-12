@@ -360,10 +360,11 @@ for i, msg in enumerate(history):
             if extra:
                 status = extra.get("status")
                 sources = extra.get("sources")
+                provider_tag = f" · via {extra.get('provider')}" if extra.get("provider") else ""
                 if status == "VERIFIED" and sources:
-                    st.markdown(f'<div class="status-verified">VERIFIED · {len(sources)} sources</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="status-verified">VERIFIED · {len(sources)} sources{provider_tag}</div>', unsafe_allow_html=True)
                 elif status == "LIMITED" and sources:
-                    st.markdown(f'<div class="status-limited">LIMITED · {len(sources)} source, low confidence</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="status-limited">LIMITED · {len(sources)} source, low confidence{provider_tag}</div>', unsafe_allow_html=True)
                 if sources:
                     with st.expander(f"see sources · {len(sources)}"):
                         lines = "".join(
@@ -436,6 +437,7 @@ if prompt := st.chat_input("Type a message..."):
 
     with st.chat_message("assistant"):
         search_results = None
+        search_provider = None
         mode = st.session_state.get("web_search_mode", "Auto")
 
         should_search = False
@@ -448,7 +450,7 @@ if prompt := st.chat_input("Type a message..."):
 
         if should_search:
             with st.spinner("Searching the web..."):
-                search_results = search.search_web(prompt)
+                search_results, search_provider = search.search_web(prompt)
                 st.session_state.tavily_search_count += 1
         with st.spinner("Thinking..."):
             try:
@@ -465,6 +467,6 @@ if prompt := st.chat_input("Type a message..."):
 
     db.save_message(
         session_id, "assistant", reply,
-        meta={"status": result["status"], "sources": result["sources"], "model": result["model"]},
+        meta={"status": result["status"], "sources": result["sources"], "model": result["model"], "provider": search_provider},
     )
     st.rerun()

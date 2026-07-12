@@ -68,8 +68,9 @@ def _search_tavily(query, max_results):
 
 def search_web(query, max_results=4):
     """
-    Returns a list of dicts: [{"title": ..., "url": ..., "content": ...}, ...]
-    or None if both providers fail / no keys configured.
+    Returns a tuple: (results, provider)
+    - results: list of dicts [{"title", "url", "content"}, ...] or None
+    - provider: "Exa", "Tavily", or None (if both failed / no keys configured)
     Tries Exa first (primary), falls back to Tavily if Exa fails or
     returns no results.
     Kept structured (not pre-formatted) so the UI can render a separate
@@ -77,5 +78,8 @@ def search_web(query, max_results=4):
     """
     result = _search_exa(query, max_results)
     if result:
-        return result
-    return _search_tavily(query, max_results)
+        return result, "Exa"
+    result = _search_tavily(query, max_results)
+    if result:
+        return result, "Tavily"
+    return None, None
