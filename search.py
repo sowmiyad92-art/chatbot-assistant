@@ -1,27 +1,53 @@
 import os
 from tavily import TavilyClient
+from exa_py import Exa
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
-def get_tavily_key():
+def _get_key(name):
     try:
         import streamlit as st
-        if "TAVILY_API_KEY" in st.secrets:
-            return st.secrets["TAVILY_API_KEY"]
+        if name in st.secrets:
+            return st.secrets[name]
     except Exception:
         pass
-    return os.environ.get("TAVILY_API_KEY")
+    return os.environ.get(name)
 
 
-def search_web(query, max_results=4):
-    """
-    Returns a list of dicts: [{"title": ..., "url": ..., "content": ...}, ...]
-    or None if search fails / no key configured.
-    Kept structured (not pre-formatted) so the UI can render a separate
-    sources panel instead of inline URLs in the answer text.
-    """
+def get_tavily_key():
+    return _get_key("TAVILY_API_KEY")
+
+
+def get_exa_key():
+    return _get_key("EXA_API_KEY")
+
+
+def _search_exa(query, max_results):
+    key = get_exa_key()
+    if not key:
+        return None
+    try:
+        client = Exa(api_key=key)
+        response = client.search_and_contents(
+            query,
+            num_results=max_results,
+            text={"max_characters": 300},
+        )
+        structured = []
+        for r in response.results:
+            structured.append({
+                "title": r.title or "Untitled",
+                "url": r.url or "",
+                "content": (r.text or "")[:300],
+            })
+        return structured if structured else None
+    except Exception:
+        return None
+
+
+def _search_tavily(query, max_results):
     key = get_tavily_key()
     if not key:
         return None
@@ -38,3 +64,18 @@ def search_web(query, max_results=4):
         return structured if structured else None
     except Exception:
         return None
+
+
+def search_web(query, max_results=4):
+    """
+    Returns a list of dicts: [{"title": ..., "url": ..., "content": ...}, ...]
+    or None if both providers fail / no keys configured.
+    Tries Exa first (primary), falls back to Tavily if Exa fails or
+    returns no results.
+    Kept structured (not pre-formatted) so the UI can render a separate
+    sources panel instead of inline URLs in the answer text.
+    """
+    result = _search_exa(query, max_results)
+    if result:
+        return result
+    return _search_tavily(query, max_results)
