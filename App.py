@@ -13,20 +13,24 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400&display=swap');
 
 :root {
-    --bg: #14181F;
-    --bg-sidebar: #1A1F29;
-    --bg-input: #1F2530;
-    --text: #F5F1E8;
-    --text-dim: #A8ADB8;
+    --bg: #0B0E14;
+    --bg-sidebar: #10141C;
+    --bg-input: #161B24;
+    --bg-panel: #131720;
+    --text: #E8E6E0;
+    --text-dim: #6B7280;
+    --accent-user: #D9704A;
     --accent-assistant: #6FA8AF;
-    --accent-user: #E08A4F;
-    --border: #333B4A;
+    --accent-verified: #4CAF6D;
+    --accent-limited: #D97706;
+    --border: #232A36;
 }
 
 html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
     color: var(--text) !important;
 }
+* { scrollbar-color: var(--border) var(--bg); }
 
 .stApp { background-color: var(--bg); }
 
@@ -72,7 +76,7 @@ div[data-testid="stCaptionContainer"] { color: var(--text-dim) !important; }
     cursor: pointer;
 }
 .session-item.active { color: var(--text) !important; font-weight: 500; }
-.session-item.active::before { content: "◆ "; color: var(--accent-assistant); }
+.session-item.active::before { content: "● "; color: var(--accent-verified); }
 
 .stChatMessage {
     background: transparent !important;
@@ -89,13 +93,20 @@ div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
     border-left: 2px solid var(--accent-assistant);
 }
 
-.timestamp {
+.role-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--text-dim);
-    margin-top: -6px;
-    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 4px;
     margin-left: 14px;
+}
+.role-label.user { color: var(--accent-user); }
+.role-label.assistant { color: var(--accent-assistant); }
+.role-label .time {
+    color: var(--text-dim);
+    font-weight: 400;
+    margin-left: 8px;
+    font-size: 12px;
 }
 
 /* Model badge pill */
@@ -104,13 +115,13 @@ div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     color: var(--text-dim);
-    background: var(--bg-input);
+    background: var(--bg-panel);
     border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 2px 10px;
+    padding: 3px 12px;
     margin-left: 14px;
-    margin-bottom: 10px;
-    cursor: help;
+    margin-top: 8px;
+    margin-bottom: 6px;
 }
 
 /* Copy button */
@@ -127,21 +138,37 @@ div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
 }
 .copy-btn:hover { color: var(--text); border-color: var(--accent-assistant); }
 
+.tavily-usage {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
 /* Status flags */
-.status-verified {
+.status-verified, .status-limited {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: #6FAF7A;
+    font-size: 12px;
+    font-weight: 500;
     margin-left: 14px;
+    margin-top: 6px;
 }
+.status-verified { color: var(--accent-verified); }
 .status-verified::before { content: "● "; }
-.status-limited {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: #D9A441;
-    margin-left: 14px;
-}
+.status-limited { color: var(--accent-limited); }
 .status-limited::before { content: "● "; }
+
+.sources-panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 8px 0 8px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+}
+.sources-panel .src-line { color: var(--text-dim); margin: 4px 0; }
+.sources-panel .src-line a { color: #6FA8D9; text-decoration: none; }
+.sources-panel .src-line a:hover { text-decoration: underline; }
 
 section[data-testid="stSidebar"] .stButton:first-of-type button {
     font-family: 'Space Grotesk', sans-serif;
@@ -169,14 +196,11 @@ section[data-testid="stSidebar"] .stButton button:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- Avatars ----------
 # NOTE: st.chat_message(avatar=...) is unreliable across Streamlit versions —
 # it validates against emoji ranges and can crash on both geometric shapes (●/◆)
 # AND standard emoji depending on the Streamlit/Python build (confirmed crash on
-# python3.14 here). Safest fix: don't use avatar= at all. Render our own marker
-# as plain markdown text instead — same visual result, no validation risk.
-AVATAR_USER = "●"
-AVATAR_ASSISTANT = "◆"
+# python3.14 here). We don't use avatar= at all — role labels (user/assistant)
+# are rendered as styled markdown text above each message instead.
 
 # ---------- Sidebar: sessions + settings ----------
 if "current_session_id" not in st.session_state:
@@ -190,6 +214,8 @@ if "show_subtitle" not in st.session_state:
     st.session_state.show_subtitle = False   # hidden by default per your call
 if "show_full_model_name" not in st.session_state:
     st.session_state.show_full_model_name = False  # hidden by default, badge shows short form
+if "tavily_search_count" not in st.session_state:
+    st.session_state.tavily_search_count = 0
 
 with st.sidebar:
     st.markdown("### Sessions")
@@ -239,10 +265,19 @@ with st.sidebar:
             "Show full model name on badge", value=st.session_state.show_full_model_name
         )
 
+    st.markdown("---")
+    with st.expander("▸ tavily_usage (click to reveal)"):
+        st.markdown(
+            f'<span class="tavily-usage">{st.session_state.tavily_search_count} searches this session</span>',
+            unsafe_allow_html=True,
+        )
+
 # ---------- Main chat area ----------
 st.markdown("## Aadsia")
 if st.session_state.show_subtitle:
     st.caption("groq · supabase · tavily — verified web-grounded answers")
+else:
+    st.caption("verified web-grounded answers")
 
 session_id = st.session_state.current_session_id
 history = db.get_session_messages(session_id)
@@ -251,15 +286,17 @@ if not history:
     st.info("No messages yet — say hello to start this session.")
 
 for i, msg in enumerate(history):
-    marker = AVATAR_USER if msg["role"] == "user" else AVATAR_ASSISTANT
-    with st.chat_message(msg["role"]):
+    role = msg["role"]
+    ts = msg["timestamp"][11:19] if msg["timestamp"] else ""
+
+    with st.chat_message(role):
+        st.markdown(
+            f'<div class="role-label {role}">{role}<span class="time">{ts}</span></div>',
+            unsafe_allow_html=True,
+        )
         st.write(msg["content"])
 
-        ts = msg["timestamp"][11:19] if msg["timestamp"] else ""
-        who = "you" if msg["role"] == "user" else "aadsia"
-        st.markdown(f'<div class="timestamp">{marker} {who} · {ts}</div>', unsafe_allow_html=True)
-
-        if msg["role"] == "assistant":
+        if role == "assistant":
             extra = db.get_message_meta(msg)
 
             if extra:
@@ -270,13 +307,16 @@ for i, msg in enumerate(history):
                 elif status == "LIMITED" and sources:
                     st.markdown(f'<div class="status-limited">LIMITED · {len(sources)} source, low confidence</div>', unsafe_allow_html=True)
                 if sources:
-                    with st.expander(f"see sources ({len(sources)})"):
-                        for s in sources:
-                            st.markdown(f"→ **{s['title']}** — [{s['url']}]({s['url']})")
+                    with st.expander(f"see sources · {len(sources)}"):
+                        lines = "".join(
+                            f'<div class="src-line">→ {s["title"]} — <a href="{s["url"]}" target="_blank">{s["url"]}</a></div>'
+                            for s in sources
+                        )
+                        st.markdown(f'<div class="sources-panel">{lines}</div>', unsafe_allow_html=True)
 
             model_for_badge = extra["model"] if extra and extra.get("model") else st.session_state.selected_model
-            model_label = model_for_badge if st.session_state.show_full_model_name else "⚡"
-            st.markdown(f'<span class="model-badge" title="{model_for_badge}">{model_label}</span>', unsafe_allow_html=True)
+            model_label = f"⚡ groq/{model_for_badge}" if st.session_state.show_full_model_name else "⚡"
+            st.markdown(f'<span class="model-badge" title="groq/{model_for_badge}">{model_label}</span>', unsafe_allow_html=True)
 
             safe_text = msg["content"].replace("`", "'").replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
             st.markdown(f"""
@@ -299,6 +339,7 @@ if prompt := st.chat_input("Type a message..."):
         if st.session_state.get("web_search_enabled"):
             with st.spinner("Searching the web..."):
                 search_results = search.search_web(prompt)
+                st.session_state.tavily_search_count += 1
         with st.spinner("Thinking..."):
             try:
                 result = llm.get_response(
