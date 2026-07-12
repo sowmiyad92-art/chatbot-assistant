@@ -22,7 +22,7 @@ st.markdown("""
     --text-dim: #6B7280;
     --accent-user: #D9704A;
     --accent-assistant: #6FA8AF;
-    --accent-verified: #4CAF6D;
+    --accent-verified: #34D399;   /* was #4CAF6D */
     --accent-limited: #D97706;
     --border: #232A36;
 }
