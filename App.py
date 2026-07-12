@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import db
 import llm
 import search
@@ -318,10 +319,24 @@ for i, msg in enumerate(history):
             model_label = f"⚡ groq/{model_for_badge}" if st.session_state.show_full_model_name else "⚡"
             st.markdown(f'<span class="model-badge" title="groq/{model_for_badge}">{model_label}</span>', unsafe_allow_html=True)
 
-            safe_text = msg["content"].replace("`", "'").replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
-            st.markdown(f"""
-                <button class="copy-btn" onclick="navigator.clipboard.writeText(&quot;{safe_text}&quot;)">copy</button>
-            """, unsafe_allow_html=True)
+            safe_text = msg["content"].replace("\\", "\\\\").replace("`", "'").replace("\n", "\\n").replace('"', '\\"')
+            components.html(f"""
+                <style>
+                  body {{ margin: 0; }}
+                  .copy-btn {{
+                    font-family: 'JetBrains Mono', monospace;
+                    font-size: 11px;
+                    color: #6B7280;
+                    background: transparent;
+                    border: 1px solid #232A36;
+                    border-radius: 4px;
+                    padding: 2px 10px;
+                    cursor: pointer;
+                  }}
+                  .copy-btn:hover {{ color: #E8E6E0; border-color: #6FA8AF; }}
+                </style>
+                <button class="copy-btn" onclick="navigator.clipboard.writeText(&quot;{safe_text}&quot;); this.innerText='copied';">copy</button>
+            """, height=32)
 
 if prompt := st.chat_input("Type a message..."):
     if not history:
