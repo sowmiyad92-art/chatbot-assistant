@@ -1,111 +1,119 @@
-import sqlite3
+import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
-DB_PATH = "chatbot.db"
+from supabase import create_client
 
 
-def get_connection():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+def get_supabase_credentials():
+    try:
+        import streamlit as st
+        url = st.secrets.get("SUPABASE_URL")
+        key = st.secrets.get("SUPABASE_KEY")
+        if url and key:
+            return url, key
+    except Exception:
+        pass
+    return os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_KEY")
+
+
+_url, _key = get_supabase_credentials()
+if not _url or not _key:
+    raise RuntimeError(
+        "Missing SUPABASE_URL / SUPABASE_KEY. Add them to .streamlit/secrets.toml "
+        "locally, or to your app's Secrets in Streamlit Cloud settings."
+    )
+
+supabase = create_client(_url, _key)
 
 
 def init_db():
-    conn = get_connection()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id INTEGER NOT NULL,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            timestamp TEXT NOT NULL,
-            meta TEXT,
-            FOREIGN KEY (session_id) REFERENCES sessions (id)
-        )
-    """)
-    # Migration: add meta column if the table already existed without it
-    cols = [row["name"] for row in conn.execute("PRAGMA table_info(messages)").fetchall()]
-    if "meta" not in cols:
-        conn.execute("ALTER TABLE messages ADD COLUMN meta TEXT")
-    conn.commit()
-    conn.close()
+    """
+    No-op: Supabase tables are created once via the SQL editor, not at runtime
+    (the anon/service key used here doesn't have DDL permission, and shouldn't).
+    Run this once in your Supabase project's SQL editor before first use:
+
+    create table sessions (
+        id bigint generated always as identity primary key,
+        name text not null,
+        created_at timestamptz not null default now()
+    );
+
+    create table messages (
+        id bigint generated always as identity primary key,
+        session_id bigint not null references sessions(id) on delete cascade,
+        role text not null,
+        content text not null,
+        timestamp timestamptz not null default now(),
+        meta jsonb
+    );
+    """
+    pass
 
 
 def create_session(name="New chat"):
-    conn = get_connection()
-    cur = conn.execute(
-        "INSERT INTO sessions (name, created_at) VALUES (?, ?)",
-        (name, datetime.now().isoformat())
-    )
-    conn.commit()
-    session_id = cur.lastrowid
-    conn.close()
-    return session_id
+    result = supabase.table("sessions").insert({
+        "name": name,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
+    return result.data[0]["id"]
 
 
 def get_sessions():
-    conn = get_connection()
-    rows = conn.execute("SELECT * FROM sessions ORDER BY id DESC").fetchall()
-    conn.close()
-    return rows
+    result = supabase.table("sessions").select("*").order("id", desc=True).execute()
+    return result.data
 
 
 def get_session_messages(session_id):
-    conn = get_connection()
-    rows = conn.execute(
-        "SELECT * FROM messages WHERE session_id = ? ORDER BY id ASC",
-        (session_id,)
-    ).fetchall()
-    conn.close()
-    return rows
+    result = (
+        supabase.table("messages")
+        .select("*")
+        .eq("session_id", session_id)
+        .order("id", desc=False)
+        .execute()
+    )
+    return result.data
 
 
 def save_message(session_id, role, content, meta=None):
     """
     meta: optional dict, e.g. {"status": "VERIFIED", "sources": [...], "model": "..."}
-    Stored as JSON text. Pass None for user messages.
+    Stored directly in the jsonb column — no manual json.dumps needed, unlike
+    the old sqlite version, since Supabase handles jsonb natively.
     """
-    conn = get_connection()
-    meta_json = json.dumps(meta) if meta else None
-    conn.execute(
-        "INSERT INTO messages (session_id, role, content, timestamp, meta) VALUES (?, ?, ?, ?, ?)",
-        (session_id, role, content, datetime.now().isoformat(), meta_json)
-    )
-    conn.commit()
-    conn.close()
+    supabase.table("messages").insert({
+        "session_id": session_id,
+        "role": role,
+        "content": content,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "meta": meta,
+    }).execute()
 
 
 def get_message_meta(msg_row):
-    """Parse the meta JSON column back into a dict, or None."""
-    if msg_row["meta"]:
-        try:
-            return json.loads(msg_row["meta"])
-        except (TypeError, ValueError):
-            return None
-    return None
+    """
+    Parse the meta column back into a dict, or None.
+    Supabase's client usually already returns jsonb as a parsed dict, but this
+    handles the case where it comes back as a JSON string too, just in case.
+    """
+    meta = msg_row.get("meta")
+    if meta is None:
+        return None
+    if isinstance(meta, dict):
+        return meta
+    try:
+        return json.loads(meta)
+    except (TypeError, ValueError):
+        return None
 
 
 def rename_session(session_id, new_name):
-    conn = get_connection()
-    conn.execute("UPDATE sessions SET name = ? WHERE id = ?", (new_name, session_id))
-    conn.commit()
-    conn.close()
+    supabase.table("sessions").update({"name": new_name}).eq("id", session_id).execute()
 
 
 def delete_session(session_id):
-    conn = get_connection()
-    conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
-    conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
-    conn.commit()
-    conn.close()
+    # messages are deleted automatically via "on delete cascade" in the schema above
+    supabase.table("sessions").delete().eq("id", session_id).execute()
 
 
 def update_session_name_from_first_message(session_id, content):
