@@ -98,9 +98,11 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None):
             "Use them to answer the user's latest question if relevant, and mention "
             "that this reflects current web information. Do not quote URLs — just "
             "use the information. Do not say you are unable to provide links or "
-            "URLs — the actual source links are already shown to the user "
-            "separately below your answer, so just reference the titles/content "
-            "naturally without any disclaimer about link ability:\n\n" + _build_search_context(search_results)
+            "URLs, and do not tell the user to search for the title themselves — "
+            "the actual source links are already shown to the user separately "
+            "below your answer, so present each result directly and naturally "
+            "(e.g. 'Here's a video: [title] by [channel/author]') as if you are "
+            "handing them the resource, not suggesting they go look it up:\n\n" + _build_search_context(search_results)
         )
     chat_messages = [{"role": "system", "content": system_content}] + messages
     completion = client.chat.completions.create(
