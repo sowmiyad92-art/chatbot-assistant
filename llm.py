@@ -5,14 +5,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_api_key():
-    # Try Streamlit Cloud secrets first (only available when deployed)
     try:
         import streamlit as st
         if "GROQ_API_KEY" in st.secrets:
             return st.secrets["GROQ_API_KEY"]
     except Exception:
         pass
-    # Fall back to local .env / environment variable
     return os.environ.get("GROQ_API_KEY")
 
 
@@ -22,22 +20,42 @@ DEFAULT_MODEL = "llama-3.1-8b-instant"
 
 SYSTEM_PROMPT = (
     "You are a helpful, friendly assistant. Give clear, concise answers. "
-    "If you don't know something, say so honestly."
+    "If you don't know something, say so honestly. "
+    "Never include raw URLs or link text inline in your answer — sources are "
+    "shown separately to the user, so just write the answer in plain prose."
 )
 
 
-def get_response(messages, model=DEFAULT_MODEL, search_context=None):
+def _build_search_context(search_results):
+    """Turn structured search results into a text block for the model prompt."""
+    lines = []
+    for r in search_results:
+        lines.append(f"- {r['title']}: {r['content']}")
+    return "\n".join(lines)
+
+
+def get_response(messages, model=DEFAULT_MODEL, search_results=None):
     """
     messages: list of {"role": "user"/"assistant", "content": "..."}
-    search_context: optional string of fresh web search results to ground the answer
-    Returns the assistant's reply as a string.
+    search_results: optional list of {"title","url","content"} from search.search_web
+
+    Returns a dict:
+        {
+            "text": str,              # the answer, no inline URLs
+            "sources": list | None,   # the raw search_results passed in, for the UI panel
+            "status": "VERIFIED" | "LIMITED" | "NONE",
+            "model": str,
+        }
+    Status is a simple source-count heuristic — swap in a real confidence
+    check later (e.g. did the model's claims actually match source content).
     """
     system_content = SYSTEM_PROMPT
-    if search_context:
+    if search_results:
         system_content += (
             "\n\nYou have been given the following up-to-date web search results. "
             "Use them to answer the user's latest question if relevant, and mention "
-            "that this reflects current web information:\n\n" + search_context
+            "that this reflects current web information. Do not quote URLs — just "
+            "use the information:\n\n" + _build_search_context(search_results)
         )
     chat_messages = [{"role": "system", "content": system_content}] + messages
     completion = client.chat.completions.create(
@@ -45,4 +63,18 @@ def get_response(messages, model=DEFAULT_MODEL, search_context=None):
         messages=chat_messages,
         temperature=0.7,
     )
-    return completion.choices[0].message.content
+    text = completion.choices[0].message.content
+
+    if not search_results:
+        status = "NONE"
+    elif len(search_results) >= 2:
+        status = "VERIFIED"
+    else:
+        status = "LIMITED"
+
+    return {
+        "text": text,
+        "sources": search_results,
+        "status": status,
+        "model": model,
+    }

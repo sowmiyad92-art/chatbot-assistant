@@ -1,4 +1,5 @@
 import sqlite3
+import json
 from datetime import datetime
 
 DB_PATH = "chatbot.db"
@@ -26,9 +27,14 @@ def init_db():
             role TEXT NOT NULL,
             content TEXT NOT NULL,
             timestamp TEXT NOT NULL,
+            meta TEXT,
             FOREIGN KEY (session_id) REFERENCES sessions (id)
         )
     """)
+    # Migration: add meta column if the table already existed without it
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(messages)").fetchall()]
+    if "meta" not in cols:
+        conn.execute("ALTER TABLE messages ADD COLUMN meta TEXT")
     conn.commit()
     conn.close()
 
@@ -62,14 +68,29 @@ def get_session_messages(session_id):
     return rows
 
 
-def save_message(session_id, role, content):
+def save_message(session_id, role, content, meta=None):
+    """
+    meta: optional dict, e.g. {"status": "VERIFIED", "sources": [...], "model": "..."}
+    Stored as JSON text. Pass None for user messages.
+    """
     conn = get_connection()
+    meta_json = json.dumps(meta) if meta else None
     conn.execute(
-        "INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
-        (session_id, role, content, datetime.now().isoformat())
+        "INSERT INTO messages (session_id, role, content, timestamp, meta) VALUES (?, ?, ?, ?, ?)",
+        (session_id, role, content, datetime.now().isoformat(), meta_json)
     )
     conn.commit()
     conn.close()
+
+
+def get_message_meta(msg_row):
+    """Parse the meta JSON column back into a dict, or None."""
+    if msg_row["meta"]:
+        try:
+            return json.loads(msg_row["meta"])
+        except (TypeError, ValueError):
+            return None
+    return None
 
 
 def rename_session(session_id, new_name):

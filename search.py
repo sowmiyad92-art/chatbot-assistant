@@ -16,16 +16,25 @@ def get_tavily_key():
 
 
 def search_web(query, max_results=4):
-    """Returns a formatted string of search results, or None if it fails."""
+    """
+    Returns a list of dicts: [{"title": ..., "url": ..., "content": ...}, ...]
+    or None if search fails / no key configured.
+    Kept structured (not pre-formatted) so the UI can render a separate
+    sources panel instead of inline URLs in the answer text.
+    """
     key = get_tavily_key()
     if not key:
         return None
     try:
         client = TavilyClient(api_key=key)
         results = client.search(query, max_results=max_results)
-        formatted = []
+        structured = []
         for r in results.get("results", []):
-            formatted.append(f"- {r['title']}: {r['content'][:300]} (source: {r['url']})")
-        return "\n".join(formatted) if formatted else None
+            structured.append({
+                "title": r.get("title", "Untitled"),
+                "url": r.get("url", ""),
+                "content": r.get("content", "")[:300],
+            })
+        return structured if structured else None
     except Exception:
         return None
