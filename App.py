@@ -260,8 +260,8 @@ if "show_subtitle" not in st.session_state:
     st.session_state.show_subtitle = False   # hidden by default per your call
 if "show_full_model_name" not in st.session_state:
     st.session_state.show_full_model_name = False  # hidden by default, badge shows short form
-if "tavily_search_count" not in st.session_state:
-    st.session_state.tavily_search_count = 0
+if "search_usage_count" not in st.session_state:
+    st.session_state.search_usage_count = 0
 
 with st.sidebar:
     st.markdown("### Sessions")
@@ -324,9 +324,9 @@ with st.sidebar:
         )
 
     st.markdown("---")
-    with st.expander("▸ tavily_usage (click to reveal)"):
+    with st.expander("▸ search_usage (click to reveal)"):
         st.markdown(
-            f'<span class="tavily-usage">{st.session_state.tavily_search_count} searches this session</span>',
+            f'<span class="tavily-usage">{st.session_state.search_usage_count} searches this session</span>',
             unsafe_allow_html=True,
         )
 
@@ -451,7 +451,7 @@ if prompt := st.chat_input("Type a message..."):
         if should_search:
             with st.spinner("Searching the web..."):
                 search_results, search_provider = search.search_web(prompt)
-                st.session_state.tavily_search_count += 1
+                st.session_state.search_usage_count += 1
         with st.spinner("Thinking..."):
             try:
                 result = llm.get_response(
