@@ -97,7 +97,10 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None):
             "\n\nYou have been given the following up-to-date web search results. "
             "Use them to answer the user's latest question if relevant, and mention "
             "that this reflects current web information. Do not quote URLs — just "
-            "use the information:\n\n" + _build_search_context(search_results)
+            "use the information. Do not say you are unable to provide links or "
+            "URLs — the actual source links are already shown to the user "
+            "separately below your answer, so just reference the titles/content "
+            "naturally without any disclaimer about link ability:\n\n" + _build_search_context(search_results)
         )
     chat_messages = [{"role": "system", "content": system_content}] + messages
     completion = client.chat.completions.create(
