@@ -68,6 +68,30 @@ h1, h2, h3 {
 }
 div[data-testid="stCaptionContainer"] { color: var(--text-dim) !important; }
 
+/* Sidebar section labels: uppercase small-caps monospace, matching reference */
+section[data-testid="stSidebar"] h3 {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 12px !important;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim) !important;
+    font-weight: 500 !important;
+}
+
+/* "+ new_session" style button: bordered, monospace, green */
+section[data-testid="stSidebar"] .stButton:first-of-type button {
+    font-family: 'JetBrains Mono', monospace !important;
+    background-color: transparent !important;
+    color: var(--accent-verified) !important;
+    border: 1px solid var(--accent-verified) !important;
+    border-radius: 4px !important;
+    font-weight: 500 !important;
+    text-align: center !important;
+}
+section[data-testid="stSidebar"] .stButton:first-of-type button:hover {
+    background-color: rgba(76, 175, 109, 0.1) !important;
+}
+
 .session-item {
     padding: 10px 12px;
     border-bottom: 1px solid var(--border);
@@ -87,6 +111,11 @@ div[data-testid="stCaptionContainer"] { color: var(--text-dim) !important; }
 }
 div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
 
+/* Hide default avatar icon entirely — reference design has no icon, just a colored border */
+[data-testid="stChatMessageAvatarUser"], [data-testid="stChatMessageAvatarAssistant"],
+[data-testid*="Avatar"] {
+    display: none !important;
+}
 .stChatMessage:has(div[data-testid="stChatMessageAvatarUser"]) {
     border-left: 2px solid var(--accent-user);
 }
@@ -171,14 +200,6 @@ div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
 .sources-panel .src-line a { color: #6FA8D9; text-decoration: none; }
 .sources-panel .src-line a:hover { text-decoration: underline; }
 
-section[data-testid="stSidebar"] .stButton:first-of-type button {
-    font-family: 'Space Grotesk', sans-serif;
-    background-color: var(--accent-assistant);
-    color: var(--bg);
-    border: none;
-    border-radius: 4px;
-    font-weight: 700;
-}
 section[data-testid="stSidebar"] .stButton button {
     background-color: transparent !important;
     color: var(--text-dim) !important;
@@ -220,7 +241,7 @@ if "tavily_search_count" not in st.session_state:
 
 with st.sidebar:
     st.markdown("### Sessions")
-    if st.button("+ New chat", use_container_width=True):
+    if st.button("+ new_session", use_container_width=True):
         new_id = db.create_session("New chat")
         st.session_state.current_session_id = new_id
         st.rerun()
@@ -229,7 +250,7 @@ with st.sidebar:
     for s in sessions:
         col1, col2 = st.columns([5, 1])
         with col1:
-            label = ("◆ " if s["id"] == st.session_state.current_session_id else "") + s["name"]
+            label = ("● " if s["id"] == st.session_state.current_session_id else "") + s["name"]
             if st.button(label, key=f"session_{s['id']}", use_container_width=True):
                 st.session_state.current_session_id = s["id"]
                 st.rerun()
