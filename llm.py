@@ -35,9 +35,13 @@ CLASSIFIER_PROMPT = (
     "week's/this month's data, live prices or scores, current weather, who currently "
     "holds a role or position, anything time-sensitive, or anything explicitly about "
     "'latest', 'current', 'recent', 'today', 'now'.\n\n"
+    "Also answer YES if the user is asking for a real link, URL, video, or specific "
+    "resource — e.g. 'give me a YouTube link', 'find a video', 'send me the article', "
+    "'search for', 'look up' — since these require real search results, not "
+    "general knowledge.\n\n"
     "Answer NO if the question is: general knowledge, how-to/coding help, creative "
     "writing, math, casual conversation, explanations of stable concepts, or anything "
-    "not tied to real-time information.\n\n"
+    "not tied to real-time information or a real link/resource request.\n\n"
     "Respond with exactly one word: YES or NO. Nothing else."
 )
 
