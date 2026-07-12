@@ -92,16 +92,28 @@ section[data-testid="stSidebar"] .stButton:first-of-type button:hover {
     background-color: rgba(76, 175, 109, 0.1) !important;
 }
 
-.session-item {
+.session-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     padding: 10px 12px;
     border-bottom: 1px solid var(--border);
     font-family: 'Inter', sans-serif;
     font-size: 14px;
-    color: var(--text-dim);
     cursor: pointer;
+    border-radius: 4px;
 }
-.session-item.active { color: var(--text) !important; font-weight: 500; }
-.session-item.active::before { content: "● "; color: var(--accent-verified); }
+.session-row:hover { background: rgba(255,255,255,0.04); }
+.session-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--border);
+    flex-shrink: 0;
+}
+.session-row.active .session-dot { background: var(--accent-verified); }
+.session-name { color: var(--text-dim); }
+.session-row.active .session-name { color: var(--text); font-weight: 500; }
 
 .stChatMessage {
     background: transparent !important;
@@ -225,6 +237,18 @@ section[data-testid="stSidebar"] .stButton button:hover {
 # are rendered as styled markdown text above each message instead.
 
 # ---------- Sidebar: sessions + settings ----------
+# Session switching uses a query param + <a href> link (not st.button) so the
+# active-session dot can be styled independently from the label text —
+# st.button only renders plain text, so the dot and text always shared one color.
+qp = st.query_params
+if "session_id" in qp:
+    try:
+        qid = int(qp["session_id"])
+        if qid != st.session_state.get("current_session_id"):
+            st.session_state.current_session_id = qid
+    except ValueError:
+        pass
+
 if "current_session_id" not in st.session_state:
     sessions = db.get_sessions()
     if sessions:
@@ -244,16 +268,21 @@ with st.sidebar:
     if st.button("+ new_session", use_container_width=True):
         new_id = db.create_session("New chat")
         st.session_state.current_session_id = new_id
+        st.query_params["session_id"] = str(new_id)
         st.rerun()
 
     sessions = db.get_sessions()
     for s in sessions:
         col1, col2 = st.columns([5, 1])
         with col1:
-            label = ("● " if s["id"] == st.session_state.current_session_id else "") + s["name"]
-            if st.button(label, key=f"session_{s['id']}", use_container_width=True):
-                st.session_state.current_session_id = s["id"]
-                st.rerun()
+            is_active = s["id"] == st.session_state.current_session_id
+            row_class = "session-row active" if is_active else "session-row"
+            st.markdown(
+                f'<a href="?session_id={s["id"]}" target="_self" style="text-decoration:none;">'
+                f'<div class="{row_class}"><span class="session-dot"></span>'
+                f'<span class="session-name">{s["name"]}</span></div></a>',
+                unsafe_allow_html=True,
+            )
         with col2:
             if st.button("🗑", key=f"del_{s['id']}"):
                 db.delete_session(s["id"])
