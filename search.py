@@ -33,14 +33,14 @@ def _search_exa(query, max_results):
         response = client.search_and_contents(
             query,
             num_results=max_results,
-            text={"max_characters": 300},
+            text={"max_characters": 600},
         )
         structured = []
         for r in response.results:
             structured.append({
                 "title": r.title or "Untitled",
                 "url": r.url or "",
-                "content": (r.text or "")[:300],
+                "content": (r.text or "")[:600],
             })
         return structured if structured else None
     except Exception:
