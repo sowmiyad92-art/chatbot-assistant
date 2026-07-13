@@ -66,16 +66,31 @@ def _search_tavily(query, max_results):
         return None
 
 
-def search_web(query, max_results=4):
+def search_web(query, max_results=4, provider="auto"):
     """
-    Returns a tuple: (results, provider)
+    Returns a tuple: (results, provider_used)
     - results: list of dicts [{"title", "url", "content"}, ...] or None
-    - provider: "Exa", "Tavily", or None (if both failed / no keys configured)
-    Tries Exa first (primary), falls back to Tavily if Exa fails or
-    returns no results.
+    - provider_used: "Exa", "Tavily", or None (if nothing found / no keys configured)
+
+    provider controls routing:
+    - "auto" (default): try Exa first, fall back to Tavily if Exa fails/empty.
+    - "exa": Exa only, no fallback — returns (None, None) if Exa fails/empty.
+    - "tavily": Tavily only, no fallback — returns (None, None) if Tavily fails/empty.
+
     Kept structured (not pre-formatted) so the UI can render a separate
     sources panel instead of inline URLs in the answer text.
     """
+    provider = (provider or "auto").lower()
+
+    if provider == "exa":
+        result = _search_exa(query, max_results)
+        return (result, "Exa") if result else (None, None)
+
+    if provider == "tavily":
+        result = _search_tavily(query, max_results)
+        return (result, "Tavily") if result else (None, None)
+
+    # auto: Exa primary, Tavily fallback
     result = _search_exa(query, max_results)
     if result:
         return result, "Exa"

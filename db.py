@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from supabase import create_client
 
@@ -31,7 +31,7 @@ def init_db():
     """
     No-op: Supabase tables are created once via the SQL editor, not at runtime
     (the anon/service key used here doesn't have DDL permission, and shouldn't).
-    Run this once in your Supabase project's SQL editor before first use:
+    Run these once in your Supabase project's SQL editor before first use:
 
     create table sessions (
         id bigint generated always as identity primary key,
@@ -46,6 +46,12 @@ def init_db():
         content text not null,
         timestamp timestamptz not null default now(),
         meta jsonb
+    );
+
+    create table search_log (
+        id bigint generated always as identity primary key,
+        provider text not null,
+        timestamp timestamptz not null default now()
     );
     """
     pass
@@ -122,3 +128,57 @@ def update_session_name_from_first_message(session_id, content):
     if len(content.strip()) > 40:
         short_name += "..."
     rename_session(session_id, short_name)
+
+
+def log_search_usage(provider):
+    """
+    Records one search call for usage tracking (Exa vs Tavily, monthly totals).
+    Call this once per successful search_web() call, right after you get a
+    provider back (skip logging when provider is None — nothing succeeded).
+    """
+    if not provider:
+        return
+    supabase.table("search_log").insert({
+        "provider": provider,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }).execute()
+
+
+def get_search_usage_stats(months_back=6):
+    """
+    Returns:
+        {
+            "Exa":    {"total": int, "by_month": {"2026-07": int, ...}},
+            "Tavily": {"total": int, "by_month": {"2026-07": int, ...}},
+        }
+    "total" is all-time, computed with a cheap count-only query (no rows
+    transferred). "by_month" covers the last `months_back` months, fetched
+    and aggregated in Python — fine at personal-app volume. If search_log
+    grows large, swap this for a Postgres view/RPC instead.
+    """
+    stats = {}
+    for provider in ("Exa", "Tavily"):
+        count_result = (
+            supabase.table("search_log")
+            .select("id", count="exact")
+            .eq("provider", provider)
+            .execute()
+        )
+        stats[provider] = {"total": count_result.count or 0, "by_month": {}}
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=31 * months_back)
+    rows = (
+        supabase.table("search_log")
+        .select("provider, timestamp")
+        .gte("timestamp", cutoff.isoformat())
+        .execute()
+        .data
+    )
+    for row in rows:
+        provider = row["provider"]
+        if provider not in stats:
+            stats[provider] = {"total": 0, "by_month": {}}
+        month_key = row["timestamp"][:7]  # "YYYY-MM"
+        stats[provider]["by_month"][month_key] = stats[provider]["by_month"].get(month_key, 0) + 1
+
+    return stats

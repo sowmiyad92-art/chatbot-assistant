@@ -1,5 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
+from datetime import datetime, timezone
 import db
 import llm
 import search
@@ -115,6 +116,17 @@ section[data-testid="stSidebar"] .stButton:first-of-type button:hover {
 .session-name { color: var(--text-dim); }
 .session-row.active .session-name { color: var(--text); font-weight: 500; }
 
+/* Hover-reveal delete icon — each session row is wrapped in
+   st.container(key=f"session_row_{id}"), which Streamlit renders as a div
+   with class "st-key-session_row_<id>". Requires Streamlit >= 1.32. */
+div[class*="st-key-session_row_"] .stButton {
+    opacity: 0;
+    transition: opacity 0.12s ease-in-out;
+}
+div[class*="st-key-session_row_"]:hover .stButton {
+    opacity: 1;
+}
+
 .stChatMessage {
     background: transparent !important;
     border-radius: 0 !important;
@@ -184,6 +196,8 @@ div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     color: var(--text-dim);
+    display: block;
+    margin: 2px 0;
 }
 
 /* Status flags */
@@ -236,6 +250,8 @@ section[data-testid="stSidebar"] .stButton button:hover {
 # python3.14 here). We don't use avatar= at all — role labels (user/assistant)
 # are rendered as styled markdown text above each message instead.
 
+_PROVIDER_MODE_MAP = {"Auto": "auto", "Exa only": "exa", "Tavily only": "tavily"}
+
 # ---------- Sidebar: sessions + settings ----------
 # Session switching uses a query param + <a href> link (not st.button) so the
 # active-session dot can be styled independently from the label text —
@@ -262,6 +278,8 @@ if "show_full_model_name" not in st.session_state:
     st.session_state.show_full_model_name = False  # hidden by default, badge shows short form
 if "search_usage_count" not in st.session_state:
     st.session_state.search_usage_count = 0
+if "show_all_sessions" not in st.session_state:
+    st.session_state.show_all_sessions = False
 
 with st.sidebar:
     st.markdown("### Sessions")
@@ -272,26 +290,35 @@ with st.sidebar:
         st.rerun()
 
     sessions = db.get_sessions()
-    for s in sessions:
-        col1, col2 = st.columns([5, 1])
-        with col1:
-            is_active = s["id"] == st.session_state.current_session_id
-            row_class = "session-row active" if is_active else "session-row"
-            st.markdown(
-                f'<a href="?session_id={s["id"]}" target="_self" style="text-decoration:none;">'
-                f'<div class="{row_class}"><span class="session-dot"></span>'
-                f'<span class="session-name">{s["name"]}</span></div></a>',
-                unsafe_allow_html=True,
-            )
-        with col2:
-            if st.button("🗑", key=f"del_{s['id']}"):
-                db.delete_session(s["id"])
-                remaining = db.get_sessions()
-                if remaining:
-                    st.session_state.current_session_id = remaining[0]["id"]
-                else:
-                    st.session_state.current_session_id = db.create_session("New chat")
-                st.rerun()
+    visible_sessions = sessions if st.session_state.show_all_sessions else sessions[:5]
+
+    for s in visible_sessions:
+        with st.container(key=f"session_row_{s['id']}"):
+            col1, col2 = st.columns([5, 1])
+            with col1:
+                is_active = s["id"] == st.session_state.current_session_id
+                row_class = "session-row active" if is_active else "session-row"
+                st.markdown(
+                    f'<a href="?session_id={s["id"]}" target="_self" style="text-decoration:none;">'
+                    f'<div class="{row_class}"><span class="session-dot"></span>'
+                    f'<span class="session-name">{s["name"]}</span></div></a>',
+                    unsafe_allow_html=True,
+                )
+            with col2:
+                if st.button("🗑", key=f"del_{s['id']}"):
+                    db.delete_session(s["id"])
+                    remaining = db.get_sessions()
+                    if remaining:
+                        st.session_state.current_session_id = remaining[0]["id"]
+                    else:
+                        st.session_state.current_session_id = db.create_session("New chat")
+                    st.rerun()
+
+    if len(sessions) > 5:
+        toggle_label = "▾ show fewer" if st.session_state.show_all_sessions else f"▸ show {len(sessions) - 5} more"
+        if st.button(toggle_label, key="toggle_sessions", use_container_width=True):
+            st.session_state.show_all_sessions = not st.session_state.show_all_sessions
+            st.rerun()
 
     st.markdown("---")
     st.markdown("### Model")
@@ -309,10 +336,19 @@ with st.sidebar:
         options=["Auto", "Always", "Off"],
         index=0,
         horizontal=True,
-        help="Auto: Groq decides per-question if live search is needed (saves Tavily credits). "
+        help="Auto: Groq decides per-question if live search is needed (saves search credits). "
              "Always: search every message. Off: never search.",
     )
     st.session_state.web_search_mode = web_search_mode
+
+    search_provider_mode = st.selectbox(
+        "Search provider",
+        options=["Auto", "Exa only", "Tavily only"],
+        index=0,
+        help="Auto: Exa first, Tavily as automatic fallback. Force one provider "
+             "for a second opinion — no fallback happens in that case.",
+    )
+    st.session_state.search_provider_mode = search_provider_mode
 
     st.markdown("---")
     with st.expander("⚙ Settings"):
@@ -329,6 +365,19 @@ with st.sidebar:
             f'<span class="tavily-usage">{st.session_state.search_usage_count} searches this session</span>',
             unsafe_allow_html=True,
         )
+        try:
+            usage_stats = db.get_search_usage_stats()
+            current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+            for provider in ("Exa", "Tavily"):
+                p = usage_stats.get(provider, {"total": 0, "by_month": {}})
+                this_month_count = p["by_month"].get(current_month, 0)
+                st.markdown(
+                    f'<span class="tavily-usage">{provider}: {p["total"]} total · '
+                    f'{this_month_count} this month</span>',
+                    unsafe_allow_html=True,
+                )
+        except Exception as e:
+            st.caption(f"usage stats unavailable ({e}) — has the search_log table been created?")
 
 # ---------- Main chat area ----------
 st.markdown("## Aadsia")
@@ -450,8 +499,13 @@ if prompt := st.chat_input("Type a message..."):
 
         if should_search:
             with st.spinner("Searching the web..."):
-                search_results, search_provider = search.search_web(prompt)
+                provider_choice = _PROVIDER_MODE_MAP.get(
+                    st.session_state.get("search_provider_mode", "Auto"), "auto"
+                )
+                search_results, search_provider = search.search_web(prompt, provider=provider_choice)
                 st.session_state.search_usage_count += 1
+                if search_provider:
+                    db.log_search_usage(search_provider)
         with st.spinner("Thinking..."):
             try:
                 result = llm.get_response(
