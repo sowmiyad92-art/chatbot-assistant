@@ -115,7 +115,11 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None):
             "paraphrase-into-a-new-title, or guess a plausible-sounding "
             "alternative that isn't actually there. If the search results don't "
             "contain something the user asked for, say so honestly instead of "
-            "making up a substitute:\n\n" + _build_search_context(search_results)
+            "making up a substitute. If a search result contains an exact "
+            "number (view count, subscriber count, date, etc.), state that "
+            "exact number directly — never say it's 'high', 'unable to "
+            "determine', or 'not mentioned' when the number is actually "
+            "present in the result:\n\n" + _build_search_context(search_results)
         )
     chat_messages = [{"role": "system", "content": system_content}] + messages
     completion = client.chat.completions.create(

@@ -250,7 +250,12 @@ section[data-testid="stSidebar"] .stButton button:hover {
 # python3.14 here). We don't use avatar= at all — role labels (user/assistant)
 # are rendered as styled markdown text above each message instead.
 
-_PROVIDER_MODE_MAP = {"Auto": "auto", "Exa only": "exa", "Tavily only": "tavily"}
+_PROVIDER_MODE_MAP = {
+    "Auto": "auto",
+    "Exa only": "exa",
+    "Tavily only": "tavily",
+    "YouTube only": "youtube",
+}
 
 # ---------- Sidebar: sessions + settings ----------
 # Session switching uses a query param + <a href> link (not st.button) so the
@@ -343,10 +348,11 @@ with st.sidebar:
 
     search_provider_mode = st.selectbox(
         "Search provider",
-        options=["Auto", "Exa only", "Tavily only"],
+        options=["Auto", "Exa only", "Tavily only", "YouTube only"],
         index=0,
-        help="Auto: Exa first, Tavily as automatic fallback. Force one provider "
-             "for a second opinion — no fallback happens in that case.",
+        help="Auto: routes YouTube-shaped queries (views, trending, @handles) to the "
+             "YouTube API, everything else Exa first with Tavily as automatic fallback. "
+             "Forcing one provider disables all fallback/routing.",
     )
     st.session_state.search_provider_mode = search_provider_mode
 
@@ -368,7 +374,7 @@ with st.sidebar:
         try:
             usage_stats = db.get_search_usage_stats()
             current_month = datetime.now(timezone.utc).strftime("%Y-%m")
-            for provider in ("Exa", "Tavily"):
+            for provider in ("Exa", "Tavily", "YouTube API"):
                 p = usage_stats.get(provider, {"total": 0, "by_month": {}})
                 this_month_count = p["by_month"].get(current_month, 0)
                 st.markdown(

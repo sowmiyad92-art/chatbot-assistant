@@ -3,6 +3,8 @@ from tavily import TavilyClient
 from exa_py import Exa
 from dotenv import load_dotenv
 
+import youtube
+
 load_dotenv()
 
 
@@ -70,15 +72,15 @@ def search_web(query, max_results=4, provider="auto"):
     """
     Returns a tuple: (results, provider_used)
     - results: list of dicts [{"title", "url", "content"}, ...] or None
-    - provider_used: "Exa", "Tavily", or None (if nothing found / no keys configured)
+    - provider_used: "YouTube API", "Exa", "Tavily", or None
 
     provider controls routing:
-    - "auto" (default): try Exa first, fall back to Tavily if Exa fails/empty.
-    - "exa": Exa only, no fallback — returns (None, None) if Exa fails/empty.
-    - "tavily": Tavily only, no fallback — returns (None, None) if Tavily fails/empty.
-
-    Kept structured (not pre-formatted) so the UI can render a separate
-    sources panel instead of inline URLs in the answer text.
+    - "auto" (default): if the query looks YouTube-related (channel handle,
+      "views", "trending", "subscribers", etc.), try YouTube API first, then
+      fall back to Exa, then Tavily. Otherwise Exa first, Tavily fallback.
+    - "exa": Exa only, no fallback.
+    - "tavily": Tavily only, no fallback.
+    - "youtube": YouTube API only, no fallback.
     """
     provider = (provider or "auto").lower()
 
@@ -90,7 +92,16 @@ def search_web(query, max_results=4, provider="auto"):
         result = _search_tavily(query, max_results)
         return (result, "Tavily") if result else (None, None)
 
-    # auto: Exa primary, Tavily fallback
+    if provider == "youtube":
+        result = youtube.search_youtube(query, max_results)
+        return (result, "YouTube API") if result else (None, None)
+
+    # auto
+    if youtube.is_youtube_intent(query):
+        result = youtube.search_youtube(query, max_results)
+        if result:
+            return result, "YouTube API"
+
     result = _search_exa(query, max_results)
     if result:
         return result, "Exa"

@@ -5,3 +5,6 @@ psycopg2-binary
 tavily-python
 supabase
 exa-py
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
