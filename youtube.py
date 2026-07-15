@@ -58,9 +58,45 @@ def _channel_id_from_handle(handle, key):
             params={"part": "id", "forHandle": handle, "key": key},
             timeout=10,
         )
+        if resp.status_code != 200:
+            print(f"[youtube.py] channels.forHandle failed: {resp.status_code} {resp.text[:300]}")
+            return None
         items = resp.json().get("items", [])
         return items[0]["id"] if items else None
-    except Exception:
+    except Exception as e:
+        print(f"[youtube.py] channels.forHandle exception: {e}")
+        return None
+
+
+def _channel_id_from_name(name, key):
+    """
+    Resolve a plain channel name (e.g. 'DramaBox', no @) to a channelId
+    via search.list?type=channel. This covers queries that mention a
+    channel/brand by name without an explicit @handle.
+    """
+    if not name:
+        return None
+    try:
+        resp = requests.get(
+            "https://www.googleapis.com/youtube/v3/search",
+            params={
+                "part": "snippet",
+                "type": "channel",
+                "q": name,
+                "maxResults": 1,
+                "key": key,
+            },
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            print(f"[youtube.py] search.list(type=channel) failed: {resp.status_code} {resp.text[:300]}")
+            return None
+        items = resp.json().get("items", [])
+        if not items:
+            return None
+        return items[0]["snippet"]["channelId"]
+    except Exception as e:
+        print(f"[youtube.py] search.list(type=channel) exception: {e}")
         return None
 
 
@@ -72,13 +108,19 @@ def search_youtube(query, max_results=5):
     """
     key = get_youtube_key()
     if not key:
+        print("[youtube.py] no YOUTUBE_API_KEY configured")
         return None
 
     try:
         handle = _extract_handle(query)
-        channel_id = _channel_id_from_handle(handle, key) if handle else None
-
         clean_query = re.sub(r"@\S+", "", query).strip()
+
+        channel_id = _channel_id_from_handle(handle, key) if handle else None
+        if not channel_id:
+            # No @handle given (or it didn't resolve) — try resolving a
+            # channel by name from the free-text query instead of giving up.
+            channel_id = _channel_id_from_name(clean_query, key)
+
         search_params = {
             "part": "snippet",
             "type": "video",
@@ -86,19 +128,27 @@ def search_youtube(query, max_results=5):
             "order": "viewCount",
             "key": key,
         }
-        if clean_query:
-            search_params["q"] = clean_query
         if channel_id:
+            # Scoped to the resolved channel — no need for "q" noise here,
+            # order=viewCount alone surfaces that channel's top videos.
             search_params["channelId"] = channel_id
+        elif clean_query:
+            # Last resort: unscoped keyword search across all of YouTube.
+            search_params["q"] = clean_query
 
         resp = requests.get(
             "https://www.googleapis.com/youtube/v3/search",
             params=search_params,
             timeout=10,
         )
+        if resp.status_code != 200:
+            print(f"[youtube.py] search.list(type=video) failed: {resp.status_code} {resp.text[:300]}")
+            return None
+
         items = resp.json().get("items", [])
         video_ids = [i["id"]["videoId"] for i in items if i.get("id", {}).get("videoId")]
         if not video_ids:
+            print(f"[youtube.py] no video ids for query={query!r} channel_id={channel_id!r}")
             return None
 
         stats_resp = requests.get(
@@ -106,6 +156,10 @@ def search_youtube(query, max_results=5):
             params={"part": "snippet,statistics", "id": ",".join(video_ids), "key": key},
             timeout=10,
         )
+        if stats_resp.status_code != 200:
+            print(f"[youtube.py] videos.list failed: {stats_resp.status_code} {stats_resp.text[:300]}")
+            return None
+
         video_items = stats_resp.json().get("items", [])
 
         structured = []
@@ -133,5 +187,6 @@ def search_youtube(query, max_results=5):
             s.pop("_video_id", None)
 
         return structured if structured else None
-    except Exception:
+    except Exception as e:
+        print(f"[youtube.py] search_youtube unexpected exception: {e}")
         return None
