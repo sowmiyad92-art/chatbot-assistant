@@ -119,13 +119,31 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None):
             "number (view count, subscriber count, date, etc.), state that "
             "exact number directly — never say it's 'high', 'unable to "
             "determine', or 'not mentioned' when the number is actually "
-            "present in the result:\n\n" + _build_search_context(search_results)
+            "present in the result. "
+            "If the search results contain more than one distinct ranked list "
+            "for the same topic (e.g. different sources ranking by different "
+            "criteria), do not merge them into one list. Pick the single most "
+            "specific and directly relevant list (prefer one with explicit "
+            "numeric rankings/scores over a vague 'buzzworthy' or 'notable' "
+            "mention) and present only that one, noting which ranking it's "
+            "from if useful. Resolve any ordering or duplicate-item conflicts "
+            "silently before you write your answer — never think out loud, "
+            "backtrack, or say things like 'wait, that's not right, instead...' "
+            "in the final answer. If you can't confidently produce a clean, "
+            "non-contradictory list, say the rankings from your sources "
+            "conflict and briefly describe the discrepancy instead of forcing "
+            "a merged list:\n\n" + _build_search_context(search_results)
         )
     chat_messages = [{"role": "system", "content": system_content}] + messages
+    # Lower temperature for grounded (search-backed) answers — reduces the
+    # rambling/self-correcting behavior that shows up when the model has to
+    # reconcile multiple sources at higher randomness. Ungrounded, more
+    # conversational replies keep the higher temperature.
+    temperature = 0.3 if search_results else 0.7
     completion = client.chat.completions.create(
         model=model,
         messages=chat_messages,
-        temperature=0.7,
+        temperature=temperature,
     )
     text = completion.choices[0].message.content
 
