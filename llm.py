@@ -126,13 +126,15 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None):
             "specific and directly relevant list (prefer one with explicit "
             "numeric rankings/scores over a vague 'buzzworthy' or 'notable' "
             "mention) and present only that one, noting which ranking it's "
-            "from if useful. Resolve any ordering or duplicate-item conflicts "
-            "silently before you write your answer — never think out loud, "
-            "backtrack, or say things like 'wait, that's not right, instead...' "
-            "in the final answer. If you can't confidently produce a clean, "
-            "non-contradictory list, say the rankings from your sources "
-            "conflict and briefly describe the discrepancy instead of forcing "
-            "a merged list:\n\n" + _build_search_context(search_results)
+            "from if useful. "
+            "If any single item's exact position is ambiguous or contradicted "
+            "across sources, write that one item as 'position unclear from "
+            "available sources' and move on immediately — do not attempt to "
+            "re-derive, debate, or re-explain that item's ranking. Write each "
+            "list item exactly once, in one sentence, then stop. Never repeat "
+            "a list item, a phrase, or a sentence — if you notice yourself "
+            "about to restate something you already wrote, stop the answer "
+            "there instead:\n\n" + _build_search_context(search_results)
         )
     chat_messages = [{"role": "system", "content": system_content}] + messages
     # Lower temperature for grounded (search-backed) answers — reduces the
@@ -144,6 +146,8 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None):
         model=model,
         messages=chat_messages,
         temperature=temperature,
+        max_tokens=700,       # hard cap — safety net against repetition-loop runaway output
+        frequency_penalty=0.4,  # penalize repeated tokens/phrases, small models are prone to looping
     )
     text = completion.choices[0].message.content
 
