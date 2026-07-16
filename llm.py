@@ -75,29 +75,19 @@ def needs_search(query):
         return False
 
 
-def _build_search_context(search_results):
-    """Turn structured search results into a text block for the model prompt."""
+def _build_search_context(search_results, max_chars=None):
+    """Turn structured search results into a text block for the model prompt.
+    max_chars, if set, further truncates each result's content — used for
+    the trimmed retry when a request comes back too large for the TPM limit.
+    """
     lines = []
     for r in search_results:
-        lines.append(f"- {r['title']}: {r['content']}")
+        content = r["content"][:max_chars] if max_chars else r["content"]
+        lines.append(f"- {r['title']}: {content}")
     return "\n".join(lines)
 
 
-def get_response(messages, model=DEFAULT_MODEL, search_results=None):
-    """
-    messages: list of {"role": "user"/"assistant", "content": "..."}
-    search_results: optional list of {"title","url","content"} from search.search_web
-
-    Returns a dict:
-        {
-            "text": str,              # the answer, no inline URLs
-            "sources": list | None,   # the raw search_results passed in, for the UI panel
-            "status": "VERIFIED" | "LIMITED" | "NONE",
-            "model": str,
-        }
-    Status is a simple source-count heuristic — swap in a real confidence
-    check later (e.g. did the model's claims actually match source content).
-    """
+def _build_system_content(search_results, max_chars=None):
     system_content = SYSTEM_PROMPT
     if search_results:
         system_content += (
@@ -134,21 +124,61 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None):
             "list item exactly once, in one sentence, then stop. Never repeat "
             "a list item, a phrase, or a sentence — if you notice yourself "
             "about to restate something you already wrote, stop the answer "
-            "there instead:\n\n" + _build_search_context(search_results)
+            "there instead:\n\n" + _build_search_context(search_results, max_chars)
         )
+    return system_content
+
+
+def get_response(messages, model=DEFAULT_MODEL, search_results=None):
+    """
+    messages: list of {"role": "user"/"assistant", "content": "..."}
+    search_results: optional list of {"title","url","content"} from search.search_web
+
+    Returns a dict:
+        {
+            "text": str,              # the answer, no inline URLs
+            "sources": list | None,   # the raw search_results passed in, for the UI panel
+            "status": "VERIFIED" | "LIMITED" | "NONE",
+            "model": str,
+        }
+    Status is a simple source-count heuristic — swap in a real confidence
+    check later (e.g. did the model's claims actually match source content).
+    """
+    system_content = _build_system_content(search_results)
     chat_messages = [{"role": "system", "content": system_content}] + messages
     # Lower temperature for grounded (search-backed) answers — reduces the
     # rambling/self-correcting behavior that shows up when the model has to
     # reconcile multiple sources at higher randomness. Ungrounded, more
     # conversational replies keep the higher temperature.
     temperature = 0.3 if search_results else 0.7
-    completion = client.chat.completions.create(
-        model=model,
-        messages=chat_messages,
-        temperature=temperature,
-        max_tokens=700,       # hard cap — safety net against repetition-loop runaway output
-        frequency_penalty=0.4,  # penalize repeated tokens/phrases, small models are prone to looping
-    )
+    try:
+        completion = client.chat.completions.create(
+            model=model,
+            messages=chat_messages,
+            temperature=temperature,
+            max_tokens=700,       # hard cap — safety net against repetition-loop runaway output
+            frequency_penalty=0.4,  # penalize repeated tokens/phrases, small models are prone to looping
+        )
+    except Exception as e:
+        err = str(e)
+        too_large = search_results and (
+            "413" in err or "rate_limit_exceeded" in err
+            or "tokens per minute" in err.lower() or "request too large" in err.lower()
+        )
+        if not too_large:
+            raise
+        # Request exceeded the TPM limit — retry once with heavily trimmed
+        # source content instead of surfacing a raw API error to the user.
+        print(f"[llm.py] request too large, retrying with trimmed context: {err[:200]}")
+        trimmed_system = _build_system_content(search_results, max_chars=150)
+        chat_messages = [{"role": "system", "content": trimmed_system}] + messages
+        completion = client.chat.completions.create(
+            model=model,
+            messages=chat_messages,
+            temperature=temperature,
+            max_tokens=500,
+            frequency_penalty=0.4,
+        )
     text = completion.choices[0].message.content
 
     if not search_results:

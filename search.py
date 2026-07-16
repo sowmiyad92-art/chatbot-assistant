@@ -85,7 +85,7 @@ def _search_exa(query, max_results, include_domains=None):
         client = Exa(api_key=key)
         kwargs = {
             "num_results": max_results,
-            "text": {"max_characters": 600},
+            "text": {"max_characters": 400},
         }
         if include_domains:
             kwargs["include_domains"] = include_domains
