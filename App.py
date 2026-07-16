@@ -529,7 +529,7 @@ if prompt := st.chat_input("Type a message..."):
                     api_messages,
                     model=st.session_state.selected_model,
                     search_results=search_results,
-                    search_attempted=search_attempted,
+                    
                 )
                 reply = result["text"]
             except Exception as e:
