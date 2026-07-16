@@ -100,6 +100,113 @@ def _channel_id_from_name(name, key):
         return None
 
 
+def _uploads_playlist_id(channel_id, key):
+    try:
+        resp = requests.get(
+            "https://www.googleapis.com/youtube/v3/channels",
+            params={"part": "contentDetails", "id": channel_id, "key": key},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            print(f"[youtube.py] channels.contentDetails failed: {resp.status_code} {resp.text[:300]}")
+            return None
+        items = resp.json().get("items", [])
+        if not items:
+            return None
+        return items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
+    except Exception as e:
+        print(f"[youtube.py] channels.contentDetails exception: {e}")
+        return None
+
+
+def _playlist_video_ids(playlist_id, key, max_pages=10, page_size=50):
+    """
+    Paginate a channel's uploads playlist to collect video IDs. Scans up to
+    max_pages * page_size videos (default 500) in upload order (newest
+    first). NOTE: for channels with a very large back catalog, a much
+    older viral video beyond this scan window could still be missed —
+    raise max_pages if that matters more than quota usage.
+    """
+    ids = []
+    page_token = None
+    for _ in range(max_pages):
+        params = {
+            "part": "contentDetails",
+            "playlistId": playlist_id,
+            "maxResults": page_size,
+            "key": key,
+        }
+        if page_token:
+            params["pageToken"] = page_token
+        try:
+            resp = requests.get(
+                "https://www.googleapis.com/youtube/v3/playlistItems",
+                params=params,
+                timeout=10,
+            )
+        except Exception as e:
+            print(f"[youtube.py] playlistItems exception: {e}")
+            break
+        if resp.status_code != 200:
+            print(f"[youtube.py] playlistItems failed: {resp.status_code} {resp.text[:300]}")
+            break
+        data = resp.json()
+        ids.extend(
+            i["contentDetails"]["videoId"]
+            for i in data.get("items", [])
+            if i.get("contentDetails", {}).get("videoId")
+        )
+        page_token = data.get("nextPageToken")
+        if not page_token:
+            break
+    return ids
+
+
+def _videos_with_stats(video_ids, key):
+    """Batch-fetch snippet+statistics for video_ids, 50 at a time."""
+    all_items = []
+    for i in range(0, len(video_ids), 50):
+        batch = video_ids[i:i + 50]
+        try:
+            resp = requests.get(
+                "https://www.googleapis.com/youtube/v3/videos",
+                params={"part": "snippet,statistics", "id": ",".join(batch), "key": key},
+                timeout=10,
+            )
+        except Exception as e:
+            print(f"[youtube.py] videos.list exception: {e}")
+            continue
+        if resp.status_code != 200:
+            print(f"[youtube.py] videos.list failed: {resp.status_code} {resp.text[:300]}")
+            continue
+        all_items.extend(resp.json().get("items", []))
+    return all_items
+
+
+def _to_structured(video_items):
+    structured = []
+    for v in video_items:
+        vid = v["id"]
+        snippet = v.get("snippet", {})
+        stats = v.get("statistics", {})
+        view_count = stats.get("viewCount")
+        title = snippet.get("title", "Untitled")
+        channel_title = snippet.get("channelTitle", "")
+        published = snippet.get("publishedAt", "")[:10]
+        content = (
+            f"Exact view count: {view_count if view_count else 'unavailable'}. "
+            f"Channel: {channel_title}. Published: {published}."
+        )
+        structured.append({
+            "title": title,
+            "url": f"https://www.youtube.com/watch?v={vid}",
+            "content": content,
+            "_video_id": vid,
+            "_view_count": int(view_count) if view_count and view_count.isdigit() else -1,
+        })
+    return structured
+
+
 def search_youtube(query, max_results=5):
     """
     Returns structured results: [{"title","url","content"}] where content
@@ -117,74 +224,55 @@ def search_youtube(query, max_results=5):
 
         channel_id = _channel_id_from_handle(handle, key) if handle else None
         if not channel_id:
-            # No @handle given (or it didn't resolve) — try resolving a
-            # channel by name from the free-text query instead of giving up.
             channel_id = _channel_id_from_name(clean_query, key)
 
-        search_params = {
-            "part": "snippet",
-            "type": "video",
-            "maxResults": max_results,
-            "order": "viewCount",
-            "key": key,
-        }
         if channel_id:
-            # Scoped to the resolved channel — no need for "q" noise here,
-            # order=viewCount alone surfaces that channel's top videos.
-            search_params["channelId"] = channel_id
-        elif clean_query:
-            # Last resort: unscoped keyword search across all of YouTube.
-            search_params["q"] = clean_query
-
-        resp = requests.get(
-            "https://www.googleapis.com/youtube/v3/search",
-            params=search_params,
-            timeout=10,
-        )
-        if resp.status_code != 200:
-            print(f"[youtube.py] search.list(type=video) failed: {resp.status_code} {resp.text[:300]}")
-            return None
-
-        items = resp.json().get("items", [])
-        video_ids = [i["id"]["videoId"] for i in items if i.get("id", {}).get("videoId")]
-        if not video_ids:
-            print(f"[youtube.py] no video ids for query={query!r} channel_id={channel_id!r}")
-            return None
-
-        stats_resp = requests.get(
-            "https://www.googleapis.com/youtube/v3/videos",
-            params={"part": "snippet,statistics", "id": ",".join(video_ids), "key": key},
-            timeout=10,
-        )
-        if stats_resp.status_code != 200:
-            print(f"[youtube.py] videos.list failed: {stats_resp.status_code} {stats_resp.text[:300]}")
-            return None
-
-        video_items = stats_resp.json().get("items", [])
-
-        structured = []
-        for v in video_items:
-            vid = v["id"]
-            snippet = v.get("snippet", {})
-            stats = v.get("statistics", {})
-            view_count = stats.get("viewCount")
-            title = snippet.get("title", "Untitled")
-            channel_title = snippet.get("channelTitle", "")
-            published = snippet.get("publishedAt", "")[:10]
-            content = (
-                f"Exact view count: {view_count if view_count else 'unavailable'}. "
-                f"Channel: {channel_title}. Published: {published}."
+            # Reliable path: pull the channel's actual uploads and rank by
+            # viewCount ourselves — search.list's order=viewCount only sorts
+            # within whatever subset it indexed, not the full channel history.
+            playlist_id = _uploads_playlist_id(channel_id, key)
+            if not playlist_id:
+                print(f"[youtube.py] no uploads playlist for channel_id={channel_id!r}")
+                return None
+            video_ids = _playlist_video_ids(playlist_id, key)
+            if not video_ids:
+                print(f"[youtube.py] no videos in uploads playlist={playlist_id!r}")
+                return None
+            video_items = _videos_with_stats(video_ids, key)
+            structured = _to_structured(video_items)
+            structured.sort(key=lambda s: s["_view_count"], reverse=True)
+            structured = structured[:max_results]
+        else:
+            # No channel identified at all — best-effort unscoped keyword search.
+            search_params = {
+                "part": "snippet",
+                "type": "video",
+                "maxResults": max_results,
+                "order": "viewCount",
+                "key": key,
+            }
+            if clean_query:
+                search_params["q"] = clean_query
+            resp = requests.get(
+                "https://www.googleapis.com/youtube/v3/search",
+                params=search_params,
+                timeout=10,
             )
-            structured.append({
-                "title": title,
-                "url": f"https://www.youtube.com/watch?v={vid}",
-                "content": content,
-                "_video_id": vid,
-            })
+            if resp.status_code != 200:
+                print(f"[youtube.py] search.list(type=video) failed: {resp.status_code} {resp.text[:300]}")
+                return None
+            items = resp.json().get("items", [])
+            video_ids = [i["id"]["videoId"] for i in items if i.get("id", {}).get("videoId")]
+            if not video_ids:
+                print(f"[youtube.py] no video ids for query={query!r}")
+                return None
+            video_items = _videos_with_stats(video_ids, key)
+            structured = _to_structured(video_items)
 
         structured = _dedupe_by_video_id(structured)
         for s in structured:
             s.pop("_video_id", None)
+            s.pop("_view_count", None)
 
         return structured if structured else None
     except Exception as e:
