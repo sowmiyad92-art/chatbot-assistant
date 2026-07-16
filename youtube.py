@@ -38,6 +38,28 @@ def _extract_handle(query):
     return match.group(1) if match else None
 
 
+_FILLER_WORDS_RE = re.compile(
+    r"\b(search|show me|on youtube|their|most[- ]watched|most watched|"
+    r"videos?|with exact|exact|view counts?|views?|upload dates?|uploaded|"
+    r"published|find|please|can you|i want|show|me|and|for|dates?|channel|top)\b",
+    re.IGNORECASE,
+)
+
+
+def _probable_channel_name(query):
+    """
+    Strip common request-scaffolding words from a free-text query to isolate
+    the likely channel name, e.g. 'Search Reelshort on YouTube and show me
+    their 3 most-watched videos with exact view counts' -> 'Reelshort'.
+    Generic on purpose — works for any channel name, not just known ones.
+    """
+    text = re.sub(r"@\S+", "", query)
+    text = _FILLER_WORDS_RE.sub("", text)
+    text = re.sub(r"\d+", "", text)
+    text = re.sub(r"\s+", " ", text).strip(" .,!?")
+    return text or None
+
+
 def _dedupe_by_video_id(videos):
     seen = set()
     unique = []
@@ -224,7 +246,12 @@ def search_youtube(query, max_results=5):
 
         channel_id = _channel_id_from_handle(handle, key) if handle else None
         if not channel_id:
-            channel_id = _channel_id_from_name(clean_query, key)
+            # No @handle (or it didn't resolve) — try a cleaned probable
+            # channel name first (works for any channel, not hardcoded),
+            # falling back to the raw clean_query as a last resort.
+            channel_id = _channel_id_from_name(_probable_channel_name(query), key)
+            if not channel_id:
+                channel_id = _channel_id_from_name(clean_query, key)
 
         if channel_id:
             # Reliable path: pull the channel's actual uploads and rank by
@@ -270,7 +297,12 @@ def search_youtube(query, max_results=5):
             structured = _to_structured(video_items)
 
         structured = _dedupe_by_video_id(structured)
-        for s in structured:
+        for idx, s in enumerate(structured, start=1):
+            # Make the ranking explicit in the content text itself — otherwise
+            # the model has no way to know these were already sorted/filtered
+            # to the top N by view count, and hedges unnecessarily even when
+            # the data is correct and complete.
+            s["content"] = f"Rank {idx} of {len(structured)} by view count. " + s["content"]
             s.pop("_video_id", None)
             s.pop("_view_count", None)
 

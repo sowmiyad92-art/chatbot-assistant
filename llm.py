@@ -87,7 +87,7 @@ def _build_search_context(search_results, max_chars=None):
     return "\n".join(lines)
 
 
-def _build_system_content(search_results, max_chars=None):
+def _build_system_content(search_results, max_chars=None, search_attempted=False):
     system_content = SYSTEM_PROMPT
     if search_results:
         system_content += (
@@ -110,6 +110,13 @@ def _build_system_content(search_results, max_chars=None):
             "exact number directly — never say it's 'high', 'unable to "
             "determine', or 'not mentioned' when the number is actually "
             "present in the result. "
+            "present the result directly and confidently — do not add hedges "
+            "like 'I don't have information about their most-watched videos "
+            "in general' or similar disclaimers when the results already "
+            "answer the question. If a result's content includes text like "
+            "'Rank N of M by view count', that ranking was already computed "
+            "and verified before reaching you — present it as-is, with "
+            "confidence, and do not undercut it with unnecessary caveats. "
             "If the search results contain more than one distinct ranked list "
             "for the same topic (e.g. different sources ranking by different "
             "criteria), do not merge them into one list. Pick the single most "
@@ -126,13 +133,33 @@ def _build_system_content(search_results, max_chars=None):
             "about to restate something you already wrote, stop the answer "
             "there instead:\n\n" + _build_search_context(search_results, max_chars)
         )
+    elif search_attempted:
+        # A search was actually run (YouTube API, Exa, or Tavily) but came
+        # back with nothing usable. Without this, the model has no idea a
+        # search even happened and will improvise a plausible-sounding
+        # answer as if it searched — exactly the hallucination-with-no-data
+        # failure this whole grounding system exists to prevent.
+        system_content += (
+            "\n\nA live search was attempted for this request but returned no "
+            "usable results. You do NOT have any real search data for this "
+            "turn — none at all. Do not say 'I found', 'I've searched and "
+            "found', or invent any titles, channels, view counts, or other "
+            "facts. Tell the user plainly that no results were found for "
+            "that query and suggest they check the spelling/name or try "
+            "rephrasing."
+        )
     return system_content
 
 
-def get_response(messages, model=DEFAULT_MODEL, search_results=None):
+def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_attempted=False):
     """
     messages: list of {"role": "user"/"assistant", "content": "..."}
     search_results: optional list of {"title","url","content"} from search.search_web
+    search_attempted: pass True whenever search_web() was actually called this
+        turn, regardless of whether it returned results. Lets the model know
+        the difference between "search wasn't needed" and "search ran and
+        found nothing" — without it, an empty search silently falls back to
+        the model improvising an answer as if it had real data.
 
     Returns a dict:
         {
@@ -144,7 +171,7 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None):
     Status is a simple source-count heuristic — swap in a real confidence
     check later (e.g. did the model's claims actually match source content).
     """
-    system_content = _build_system_content(search_results)
+    system_content = _build_system_content(search_results, search_attempted=search_attempted)
     chat_messages = [{"role": "system", "content": system_content}] + messages
     # Lower temperature for grounded (search-backed) answers — reduces the
     # rambling/self-correcting behavior that shows up when the model has to
