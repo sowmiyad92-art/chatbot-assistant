@@ -341,7 +341,9 @@ with st.sidebar:
         options=["Auto", "Always", "Off"],
         index=0,
         horizontal=True,
-        help="Auto: Groq decides per-question if live search is needed (saves search credits). "
+        help="Auto: Groq decides per-question if live search is needed (saves search credits), "
+             "UNLESS you've forced a specific search provider below — forcing a provider always "
+             "searches, since picking one is itself a clear signal you want a search this turn. "
              "Always: search every message. Off: never search.",
     )
     st.session_state.web_search_mode = web_search_mode
@@ -352,7 +354,8 @@ with st.sidebar:
         index=0,
         help="Auto: routes YouTube-shaped queries (views, trending, @handles) to the "
              "YouTube API, everything else Exa first with Tavily as automatic fallback. "
-             "Forcing one provider disables all fallback/routing.",
+             "Forcing one provider disables all fallback/routing AND always searches "
+             "(bypasses the Auto web-search classifier above).",
     )
     st.session_state.search_provider_mode = search_provider_mode
 
@@ -494,20 +497,28 @@ if prompt := st.chat_input("Type a message..."):
         search_results = None
         search_provider = None
         mode = st.session_state.get("web_search_mode", "Auto")
+        provider_choice = _PROVIDER_MODE_MAP.get(
+            st.session_state.get("search_provider_mode", "Auto"), "auto"
+        )
 
         should_search = False
         if mode == "Always":
             should_search = True
-        elif mode == "Auto":
+        elif mode == "Off":
+            should_search = False
+        elif provider_choice != "auto":
+            # A specific provider was forced (Exa/Tavily/YouTube only) — that's
+            # itself a clear signal the user wants a search this turn, so skip
+            # the flaky needs_search() classifier entirely and just search.
+            should_search = True
+        else:
             with st.spinner("Checking if this needs live data..."):
                 should_search = llm.needs_search(prompt)
-        # mode == "Off" -> should_search stays False
 
+        search_attempted = False
         if should_search:
             with st.spinner("Searching the web..."):
-                provider_choice = _PROVIDER_MODE_MAP.get(
-                    st.session_state.get("search_provider_mode", "Auto"), "auto"
-                )
+                search_attempted = True
                 search_results, search_provider = search.search_web(prompt, provider=provider_choice)
                 st.session_state.search_usage_count += 1
                 if search_provider:
@@ -518,6 +529,7 @@ if prompt := st.chat_input("Type a message..."):
                     api_messages,
                     model=st.session_state.selected_model,
                     search_results=search_results,
+                    search_attempted=search_attempted,
                 )
                 reply = result["text"]
             except Exception as e:
