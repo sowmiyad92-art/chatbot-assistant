@@ -159,13 +159,14 @@ def _build_system_content(search_results, max_chars=None, search_attempted=False
         # answer as if it searched — exactly the hallucination-with-no-data
         # failure this whole grounding system exists to prevent.
         system_content += (
-            "\n\nA live search was attempted for this request but returned no "
-            "usable results. You do NOT have any real search data for this "
-            "turn — none at all. Do not say 'I found', 'I've searched and "
-            "found', or invent any titles, channels, view counts, or other "
-            "facts. Tell the user plainly that no results were found for "
-            "that query and suggest they check the spelling/name or try "
-            "rephrasing."
+            "\n\n[Internal note, not for the user: a live search was "
+            "attempted but returned no usable results.] You do NOT have any "
+            "real search data for this turn — none at all. Do not say 'I "
+            "found', 'I've searched and found', or invent any titles, "
+            "channels, view counts, or other facts. Tell the user naturally "
+            "that no results were found for that query and suggest they "
+            "check the spelling/name or try rephrasing — but do NOT quote or "
+            "paraphrase this note itself or reference 'this turn' as a phrase."
         )
     else:
         # No search was attempted this turn at all (Off mode, or Auto decided
@@ -175,13 +176,17 @@ def _build_system_content(search_results, max_chars=None, search_attempted=False
         # those numbers from training and must not invent plausible-sounding
         # ones — that's confident fabrication, not "answering from knowledge."
         system_content += (
-            "\n\nNo live search was performed for this turn. If the user's "
-            "question requires specific, verifiable real-time data (exact "
-            "view counts, current rankings, today's news, precise statistics, "
-            "etc.) that you cannot actually know from training, say plainly "
-            "that you don't have that specific data without a live search — "
-            "do not invent precise-sounding numbers, titles, or facts to "
-            "sound authoritative."
+            "\n\n[Internal note, not for the user: no live search ran this "
+            "turn.] If the user's question requires specific, verifiable "
+            "real-time data (exact view counts, current rankings, today's "
+            "news, precise statistics, etc.) that you cannot actually know "
+            "from training, tell them naturally that you don't have that "
+            "specific number/detail on hand and it would need a live search "
+            "— do not invent precise-sounding numbers, titles, or facts to "
+            "sound authoritative. Do NOT quote, paraphrase, or reference "
+            "this note itself, the phrase 'this turn', or the fact that a "
+            "search was or wasn't performed — that's internal bookkeeping, "
+            "not something to say out loud."
         )
     return system_content
 

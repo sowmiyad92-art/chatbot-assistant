@@ -36,7 +36,8 @@ def _get_with_retry(url, params, timeout=10, retries=1):
 
 
 YOUTUBE_KEYWORDS = [
-    "view", "views", "trending", "most viewed", "top video", "top videos",
+    "view", "views", "trending", "most viewed", "most-viewed",
+    "most watched", "most-watched", "top video", "top videos",
     "youtube", "subscriber", "subscribers",
 ]
 
@@ -286,8 +287,13 @@ def search_youtube(query, max_results=5):
         channel_id = _channel_id_from_handle(handle, key) if handle else None
         if not channel_id and probable_name and _looks_like_channel_name(probable_name):
             channel_id = _channel_id_from_name(probable_name, key)
-        if not channel_id and _looks_like_channel_name(clean_query):
-            channel_id = _channel_id_from_name(clean_query, key)
+        # NOTE: deliberately no fallback to raw clean_query here — clean_query
+        # only strips @handles, not filler words ("top", digits like "5"), so
+        # a generic query like "Top 5 Chinese micro dramas trending this week"
+        # reduces to "Top 5" after generic-topic-word stripping, which passes
+        # the length check and leaks through as a bogus channel-name search.
+        # probable_name already does the correct filler+digit stripping —
+        # that's the only channel-name candidate we trust.
 
         if not channel_id:
             # No specific channel identified — e.g. a generic topical query
