@@ -65,7 +65,10 @@ REGION_KEYWORDS = {
 REGION_DOMAINS = {
     "chinese": ["variety.com", "hollywoodreporter.com", "mtime.com", "ent.sina.com.cn", "yicai.com"],
     "korean": ["soompi.com", "koreaherald.com", "koreatimes.co.kr", "hancinema.net", "newsen.com"],
-    "arabic": ["arabnews.com", "albawaba.com", "gulfnews.com", "thenationalnews.com"],
+    "arabic": [
+        "arabnews.com", "albawaba.com", "gulfnews.com", "thenationalnews.com",
+        "broadcastprome.com", "see.news",
+    ],
 }
 
 
