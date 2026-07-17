@@ -144,7 +144,13 @@ def _build_system_content(search_results, max_chars=None, search_attempted=False
             "list item exactly once, in one sentence, then stop. Never repeat "
             "a list item, a phrase, or a sentence — if you notice yourself "
             "about to restate something you already wrote, stop the answer "
-            "there instead:\n\n" + _build_search_context(search_results, max_chars)
+            "there instead. "
+            "If the user asked for a specific number of items (top 5, top 10, "
+            "etc.) but the search results only actually support fewer distinct, "
+            "verifiable items, list only the ones truly supported and say "
+            "plainly that fewer were found than requested. NEVER invent an "
+            "additional item — a title, cast member, date, or anything else — "
+            "just to pad the list up to the requested count:\n\n" + _build_search_context(search_results, max_chars)
         )
     elif search_attempted:
         # A search was actually run (YouTube API, Exa, or Tavily) but came
@@ -160,6 +166,22 @@ def _build_system_content(search_results, max_chars=None, search_attempted=False
             "facts. Tell the user plainly that no results were found for "
             "that query and suggest they check the spelling/name or try "
             "rephrasing."
+        )
+    else:
+        # No search was attempted this turn at all (Off mode, or Auto decided
+        # it wasn't needed). If the question actually calls for specific,
+        # verifiable real-time data (exact view counts, current rankings,
+        # today's news, precise statistics), the model has no way to know
+        # those numbers from training and must not invent plausible-sounding
+        # ones — that's confident fabrication, not "answering from knowledge."
+        system_content += (
+            "\n\nNo live search was performed for this turn. If the user's "
+            "question requires specific, verifiable real-time data (exact "
+            "view counts, current rankings, today's news, precise statistics, "
+            "etc.) that you cannot actually know from training, say plainly "
+            "that you don't have that specific data without a live search — "
+            "do not invent precise-sounding numbers, titles, or facts to "
+            "sound authoritative."
         )
     return system_content
 

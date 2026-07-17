@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import db
 import llm
 import search
+import youtube
 
 
 def _html_escape(text):
@@ -524,6 +525,14 @@ if prompt := st.chat_input("Type a message..."):
             # A specific provider was forced (Exa/Tavily/YouTube only) — that's
             # itself a clear signal the user wants a search this turn, so skip
             # the flaky needs_search() classifier entirely and just search.
+            should_search = True
+        elif youtube.is_youtube_intent(prompt):
+            # Deterministic keyword check (views/trending/subscribers/@handle)
+            # instead of the LLM classifier — observed the classifier give 3
+            # different yes/no answers for the identical query seconds apart,
+            # and a "no" here means the model free-associates exact view
+            # counts and titles from nothing, which is the worst place for
+            # that classifier's flakiness to bite.
             should_search = True
         else:
             with st.spinner("Checking if this needs live data..."):
