@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -92,18 +92,64 @@ def _build_search_context(search_results, max_chars=None):
     return "\n".join(lines)
 
 
-def _build_system_content(search_results, max_chars=None, search_attempted=False):
+import calendar
+
+
+def _timeframe_range(query, today):
+    """
+    Detect a timeframe phrase in the query and compute its exact date range
+    against `today`, so the model can do a plain date comparison instead of
+    reasoning abstractly about what 'this month' means — that reasoning was
+    observed to fail (e.g. calling June 3 'within this month' when today was
+    July 17). Returns (label, start_date, end_date) or None if no phrase found.
+    """
+    q = query.lower()
+    if "next month" in q:
+        year = today.year + (1 if today.month == 12 else 0)
+        month = 1 if today.month == 12 else today.month + 1
+        start = today.replace(year=year, month=month, day=1)
+        end = start.replace(day=calendar.monthrange(year, month)[1])
+        return "next month", start, end
+    if "this month" in q:
+        start = today.replace(day=1)
+        end = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+        return "this month", start, end
+    if "this week" in q:
+        start = today - timedelta(days=today.weekday())
+        end = start + timedelta(days=6)
+        return "this week", start, end
+    if "this year" in q:
+        return "this year", today.replace(month=1, day=1), today.replace(month=12, day=31)
+    return None
+
+
+def _build_system_content(search_results, max_chars=None, search_attempted=False, latest_query=None):
     system_content = SYSTEM_PROMPT
     if search_results:
-        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(timezone.utc).date()
+        today_str = today.isoformat()
+        timeframe_note = ""
+        tf = _timeframe_range(latest_query, today) if latest_query else None
+        if tf:
+            label, start, end = tf
+            timeframe_note = (
+                f" The user's question is scoped to '{label}', which for "
+                f"today's date is exactly the range {start.isoformat()} to "
+                f"{end.isoformat()} — use these two dates directly, don't "
+                f"re-derive what '{label}' means yourself. For each search "
+                f"result, compare its date to this range: is it on or after "
+                f"{start.isoformat()} AND on or before {end.isoformat()}? If "
+                f"not, exclude that result or clearly say it falls outside "
+                f"the requested {label}."
+            )
         system_content += (
-            f"\n\nToday's actual date is {today_str}. When the user's question is "
-            "scoped to a timeframe (this week, this month, next month, this year, "
-            "etc.), check each search result's publish/event date against that "
-            "timeframe before including it. If a result's date clearly falls "
-            "outside the window the user asked about, do not present it as if it "
-            "fits — either leave it out or say plainly that it's from a different "
-            "period than requested. "
+            f"\n\nToday's actual date is {today_str}.{timeframe_note} When the "
+            "user's question is scoped to any timeframe not covered by an "
+            "exact range above, check each search result's publish/event date "
+            "against that timeframe before including it. If a result's date "
+            "clearly falls outside the window the user asked about, do not "
+            "present it as if it fits — either leave it out or say plainly "
+            "that it's from a different period than requested. "
             "\n\nYou have been given the following up-to-date web search results. "
             "Use them to answer the user's latest question if relevant, and mention "
             "that this reflects current web information. Do not quote URLs — just "
@@ -211,7 +257,14 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
     Status is a simple source-count heuristic — swap in a real confidence
     check later (e.g. did the model's claims actually match source content).
     """
-    system_content = _build_system_content(search_results, search_attempted=search_attempted)
+    latest_query = None
+    for m in reversed(messages):
+        if m.get("role") == "user":
+            latest_query = m.get("content")
+            break
+    system_content = _build_system_content(
+        search_results, search_attempted=search_attempted, latest_query=latest_query
+    )
     chat_messages = [{"role": "system", "content": system_content}] + messages
     # Lower temperature for grounded (search-backed) answers — reduces the
     # rambling/self-correcting behavior that shows up when the model has to
@@ -237,7 +290,7 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
         # Request exceeded the TPM limit — retry once with heavily trimmed
         # source content instead of surfacing a raw API error to the user.
         print(f"[llm.py] request too large, retrying with trimmed context: {err[:200]}")
-        trimmed_system = _build_system_content(search_results, max_chars=150)
+        trimmed_system = _build_system_content(search_results, max_chars=150, latest_query=latest_query)
         chat_messages = [{"role": "system", "content": trimmed_system}] + messages
         completion = client.chat.completions.create(
             model=model,
