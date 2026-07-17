@@ -16,6 +16,25 @@ def get_youtube_key():
     return os.environ.get("YOUTUBE_API_KEY")
 
 
+def _get_with_retry(url, params, timeout=10, retries=1):
+    """
+    Shared GET wrapper with one automatic retry on transient network errors
+    (timeouts, connection resets, etc). Observed real flakiness where the
+    same call would fail once and succeed on an immediate retry, silently
+    dropping to the Exa/Tavily fallback with no visibility into why. Still
+    raises after all attempts are exhausted — callers keep their own
+    try/except for the final failure.
+    """
+    last_exc = None
+    for attempt in range(retries + 1):
+        try:
+            return requests.get(url, params=params, timeout=timeout)
+        except Exception as e:
+            last_exc = e
+            print(f"[youtube.py] request attempt {attempt + 1}/{retries + 1} to {url} failed: {e}")
+    raise last_exc
+
+
 YOUTUBE_KEYWORDS = [
     "view", "views", "trending", "most viewed", "top video", "top videos",
     "youtube", "subscriber", "subscribers",
@@ -41,7 +60,7 @@ def _extract_handle(query):
 _FILLER_WORDS_RE = re.compile(
     r"\b(search|show me|on youtube|their|most[- ]watched|most watched|"
     r"videos?|with exact|exact|view counts?|views?|upload dates?|uploaded|"
-    r"published|find|please|can you|i want|show|me|and|for|dates?|channel|top)\b",
+    r"published|find|please|can you|i want|show|me|and|for|from|dates?|channel|top)\b",
     re.IGNORECASE,
 )
 
@@ -60,6 +79,30 @@ def _probable_channel_name(query):
     return text or None
 
 
+_GENERIC_TOPIC_WORDS_RE = re.compile(
+    r"\b(chinese|korean|arabic|japanese|thai|micro|dramas?|k-?dramas?|c-?dramas?|"
+    r"trending|weekly?|weeks?|monthly?|months?|today|now|recent|latest|news|"
+    r"stories?|entertainment|movies?|shows?|series|this|next|premiering|premiere|"
+    r"greenlit|greenlight)\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_channel_name(text):
+    """
+    After also stripping generic topic/genre words, is anything specific
+    left? Prevents a bare topical query like 'Chinese micro dramas trending
+    this week' — which names no actual channel — from being fuzzy-matched
+    by YouTube's channel search to some unrelated, often wrong-language,
+    channel and presented with false confidence.
+    """
+    if not text:
+        return False
+    stripped = _GENERIC_TOPIC_WORDS_RE.sub("", text)
+    stripped = re.sub(r"\s+", " ", stripped).strip(" .,!?")
+    return len(stripped) >= 2
+
+
 def _dedupe_by_video_id(videos):
     seen = set()
     unique = []
@@ -75,10 +118,9 @@ def _dedupe_by_video_id(videos):
 
 def _channel_id_from_handle(handle, key):
     try:
-        resp = requests.get(
+        resp = _get_with_retry(
             "https://www.googleapis.com/youtube/v3/channels",
             params={"part": "id", "forHandle": handle, "key": key},
-            timeout=10,
         )
         if resp.status_code != 200:
             print(f"[youtube.py] channels.forHandle failed: {resp.status_code} {resp.text[:300]}")
@@ -99,7 +141,7 @@ def _channel_id_from_name(name, key):
     if not name:
         return None
     try:
-        resp = requests.get(
+        resp = _get_with_retry(
             "https://www.googleapis.com/youtube/v3/search",
             params={
                 "part": "snippet",
@@ -108,7 +150,6 @@ def _channel_id_from_name(name, key):
                 "maxResults": 1,
                 "key": key,
             },
-            timeout=10,
         )
         if resp.status_code != 200:
             print(f"[youtube.py] search.list(type=channel) failed: {resp.status_code} {resp.text[:300]}")
@@ -124,10 +165,9 @@ def _channel_id_from_name(name, key):
 
 def _uploads_playlist_id(channel_id, key):
     try:
-        resp = requests.get(
+        resp = _get_with_retry(
             "https://www.googleapis.com/youtube/v3/channels",
             params={"part": "contentDetails", "id": channel_id, "key": key},
-            timeout=10,
         )
         if resp.status_code != 200:
             print(f"[youtube.py] channels.contentDetails failed: {resp.status_code} {resp.text[:300]}")
@@ -161,10 +201,9 @@ def _playlist_video_ids(playlist_id, key, max_pages=10, page_size=50):
         if page_token:
             params["pageToken"] = page_token
         try:
-            resp = requests.get(
+            resp = _get_with_retry(
                 "https://www.googleapis.com/youtube/v3/playlistItems",
                 params=params,
-                timeout=10,
             )
         except Exception as e:
             print(f"[youtube.py] playlistItems exception: {e}")
@@ -190,10 +229,9 @@ def _videos_with_stats(video_ids, key):
     for i in range(0, len(video_ids), 50):
         batch = video_ids[i:i + 50]
         try:
-            resp = requests.get(
+            resp = _get_with_retry(
                 "https://www.googleapis.com/youtube/v3/videos",
                 params={"part": "snippet,statistics", "id": ",".join(batch), "key": key},
-                timeout=10,
             )
         except Exception as e:
             print(f"[youtube.py] videos.list exception: {e}")
@@ -243,58 +281,42 @@ def search_youtube(query, max_results=5):
     try:
         handle = _extract_handle(query)
         clean_query = re.sub(r"@\S+", "", query).strip()
+        probable_name = _probable_channel_name(query)
 
         channel_id = _channel_id_from_handle(handle, key) if handle else None
-        if not channel_id:
-            # No @handle (or it didn't resolve) — try a cleaned probable
-            # channel name first (works for any channel, not hardcoded),
-            # falling back to the raw clean_query as a last resort.
-            channel_id = _channel_id_from_name(_probable_channel_name(query), key)
-            if not channel_id:
-                channel_id = _channel_id_from_name(clean_query, key)
+        if not channel_id and probable_name and _looks_like_channel_name(probable_name):
+            channel_id = _channel_id_from_name(probable_name, key)
+        if not channel_id and _looks_like_channel_name(clean_query):
+            channel_id = _channel_id_from_name(clean_query, key)
 
-        if channel_id:
-            # Reliable path: pull the channel's actual uploads and rank by
-            # viewCount ourselves — search.list's order=viewCount only sorts
-            # within whatever subset it indexed, not the full channel history.
-            playlist_id = _uploads_playlist_id(channel_id, key)
-            if not playlist_id:
-                print(f"[youtube.py] no uploads playlist for channel_id={channel_id!r}")
-                return None
-            video_ids = _playlist_video_ids(playlist_id, key)
-            if not video_ids:
-                print(f"[youtube.py] no videos in uploads playlist={playlist_id!r}")
-                return None
-            video_items = _videos_with_stats(video_ids, key)
-            structured = _to_structured(video_items)
-            structured.sort(key=lambda s: s["_view_count"], reverse=True)
-            structured = structured[:max_results]
-        else:
-            # No channel identified at all — best-effort unscoped keyword search.
-            search_params = {
-                "part": "snippet",
-                "type": "video",
-                "maxResults": max_results,
-                "order": "viewCount",
-                "key": key,
-            }
-            if clean_query:
-                search_params["q"] = clean_query
-            resp = requests.get(
-                "https://www.googleapis.com/youtube/v3/search",
-                params=search_params,
-                timeout=10,
-            )
-            if resp.status_code != 200:
-                print(f"[youtube.py] search.list(type=video) failed: {resp.status_code} {resp.text[:300]}")
-                return None
-            items = resp.json().get("items", [])
-            video_ids = [i["id"]["videoId"] for i in items if i.get("id", {}).get("videoId")]
-            if not video_ids:
-                print(f"[youtube.py] no video ids for query={query!r}")
-                return None
-            video_items = _videos_with_stats(video_ids, key)
-            structured = _to_structured(video_items)
+        if not channel_id:
+            # No specific channel identified — e.g. a generic topical query
+            # like "Chinese micro dramas trending this week" that names no
+            # actual channel. Do NOT fall back to an unscoped YouTube keyword
+            # search here: that was fuzzy-matching to essentially random
+            # channels (wrong language, wrong topic) and presenting the
+            # result with false confidence. Return None so the caller falls
+            # through to Exa/Tavily (with region-aware domain scoping) for
+            # general topic discovery instead.
+            print(f"[youtube.py] no specific channel identified for query={query!r} — "
+                  f"skipping YouTube API, deferring to Exa/Tavily for topic discovery")
+            return None
+
+        # Reliable path: pull the channel's actual uploads and rank by
+        # viewCount ourselves — search.list's order=viewCount only sorts
+        # within whatever subset it indexed, not the full channel history.
+        playlist_id = _uploads_playlist_id(channel_id, key)
+        if not playlist_id:
+            print(f"[youtube.py] no uploads playlist for channel_id={channel_id!r}")
+            return None
+        video_ids = _playlist_video_ids(playlist_id, key)
+        if not video_ids:
+            print(f"[youtube.py] no videos in uploads playlist={playlist_id!r}")
+            return None
+        video_items = _videos_with_stats(video_ids, key)
+        structured = _to_structured(video_items)
+        structured.sort(key=lambda s: s["_view_count"], reverse=True)
+        structured = structured[:max_results]
 
         structured = _dedupe_by_video_id(structured)
         for idx, s in enumerate(structured, start=1):

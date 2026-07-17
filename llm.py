@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -29,7 +30,11 @@ SYSTEM_PROMPT = (
     "You are a helpful, friendly assistant. Give clear, concise answers. "
     "If you don't know something, say so honestly. "
     "Never include raw URLs or link text inline in your answer — sources are "
-    "shown separately to the user, so just write the answer in plain prose."
+    "shown separately to the user, so just write the answer in plain prose. "
+    "Only claim to have searched, looked up, or found something live on the "
+    "web if real search results were actually provided to you this turn "
+    "(see below) — if none were provided, answer from your own general "
+    "knowledge and don't imply you performed a live lookup you didn't do."
 )
 
 
@@ -90,7 +95,15 @@ def _build_search_context(search_results, max_chars=None):
 def _build_system_content(search_results, max_chars=None, search_attempted=False):
     system_content = SYSTEM_PROMPT
     if search_results:
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         system_content += (
+            f"\n\nToday's actual date is {today_str}. When the user's question is "
+            "scoped to a timeframe (this week, this month, next month, this year, "
+            "etc.), check each search result's publish/event date against that "
+            "timeframe before including it. If a result's date clearly falls "
+            "outside the window the user asked about, do not present it as if it "
+            "fits — either leave it out or say plainly that it's from a different "
+            "period than requested. "
             "\n\nYou have been given the following up-to-date web search results. "
             "Use them to answer the user's latest question if relevant, and mention "
             "that this reflects current web information. Do not quote URLs — just "

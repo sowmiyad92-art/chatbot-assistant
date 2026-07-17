@@ -5,6 +5,19 @@ import db
 import llm
 import search
 
+
+def _html_escape(text):
+    """Escape text for safe inclusion in raw HTML — used for search result
+    titles/URLs, which can contain quotes, angle brackets, or other markup-
+    breaking characters (seen garbling the sources panel in testing)."""
+    return (
+        str(text)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
 st.set_page_config(page_title="Aadsia", page_icon="◆", layout="wide")
 
 db.init_db()
@@ -426,7 +439,8 @@ for i, msg in enumerate(history):
                 if sources:
                     with st.expander(f"see sources · {len(sources)}"):
                         lines = "".join(
-                            f'<div class="src-line">→ {s["title"]} — <a href="{s["url"]}" target="_blank">{s["url"]}</a></div>'
+                            f'<div class="src-line">→ {_html_escape(s["title"])} — '
+                            f'<a href="{_html_escape(s["url"])}" target="_blank">{_html_escape(s["url"])}</a></div>'
                             for s in sources
                         )
                         st.markdown(f'<div class="sources-panel">{lines}</div>', unsafe_allow_html=True)
@@ -529,7 +543,7 @@ if prompt := st.chat_input("Type a message..."):
                     api_messages,
                     model=st.session_state.selected_model,
                     search_results=search_results,
-                    
+                    search_attempted=search_attempted,
                 )
                 reply = result["text"]
             except Exception as e:
