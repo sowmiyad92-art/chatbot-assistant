@@ -1,4 +1,5 @@
 streamlit
+starlette<0.46.0
 groq
 python-dotenv
 psycopg2-binary
@@ -8,4 +9,3 @@ exa-py
 google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
-streamlit>=1.38.0
