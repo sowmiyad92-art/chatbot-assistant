@@ -17,7 +17,7 @@ def get_api_key():
 
 client = Groq(api_key=get_api_key())
 
-DEFAULT_MODEL = "llama-3.1-8b-instant"
+DEFAULT_MODEL = "openai/gpt-oss-20b"
 
 SYSTEM_PROMPT = (
     "You are Aadsia, a personal AI assistant built by Sowmiya. Your name comes "
@@ -38,7 +38,7 @@ SYSTEM_PROMPT = (
 )
 
 
-CLASSIFIER_MODEL = "llama-3.1-8b-instant"  # cheapest/fastest — this call should cost almost nothing
+CLASSIFIER_MODEL = "openai/gpt-oss-20b"  # cheapest/fastest — this call should cost almost nothing
 
 CLASSIFIER_PROMPT = (
     "You decide if a user question needs a live web search to answer well, or if "
