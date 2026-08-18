@@ -1,4 +1,4 @@
-streamlit==1.38.0
+streamlit>=1.40.0
 starlette<0.46.0
 groq
 python-dotenv
@@ -9,4 +9,3 @@ exa-py
 google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
-pillow==10.4.0
