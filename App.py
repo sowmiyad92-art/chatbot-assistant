@@ -534,6 +534,8 @@ if prompt := st.chat_input("Type a message..."):
             # counts and titles from nothing, which is the worst place for
             # that classifier's flakiness to bite.
             should_search = True
+        elif any(kw in prompt.lower() for kw in ["today", "this week", "this month", "latest", "current", "right now", "breaking"]):
+           should_search = True
         else:
             with st.spinner("Checking if this needs live data..."):
                 should_search = llm.needs_search(prompt)
