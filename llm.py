@@ -253,7 +253,7 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
 
     temperature = 0.3 if search_results else 0.7
 
-           try:
+    try:
         completion = client.chat.completions.create(
             model=model,
             messages=chat_messages,
