@@ -262,15 +262,18 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
         if m.get("role") == "user":
             latest_query = m.get("content")
             break
+
     system_content = _build_system_content(
         search_results, search_attempted=search_attempted, latest_query=latest_query
     )
     chat_messages = [{"role": "system", "content": system_content}] + messages
+
     # Lower temperature for grounded (search-backed) answers — reduces the
     # rambling/self-correcting behavior that shows up when the model has to
     # reconcile multiple sources at higher randomness. Ungrounded, more
     # conversational replies keep the higher temperature.
     temperature = 0.3 if search_results else 0.7
+
     try:
         completion = client.chat.completions.create(
             model=model,
@@ -281,6 +284,13 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
         )
     except Exception as e:
         err = str(e)
+        if "Tool choice is none, but model called a tool" in err:
+            return {
+                "text": "I can't call tools directly this way — try rephrasing your question naturally, e.g. 'Find the top lofi music videos on YouTube' instead of 'use your API tool to...'.",
+                "sources": None,
+                "status": "NONE",
+                "model": model,
+            }
         too_large = search_results and (
             "413" in err or "rate_limit_exceeded" in err
             or "tokens per minute" in err.lower() or "request too large" in err.lower()
@@ -299,6 +309,7 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
             max_tokens=500,
             frequency_penalty=0.4,
         )
+
     text = completion.choices[0].message.content
 
     if not search_results:
