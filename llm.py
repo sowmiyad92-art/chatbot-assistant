@@ -253,7 +253,7 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
 
     temperature = 0.3 if search_results else 0.7
 
-    try:
+           try:
         completion = client.chat.completions.create(
             model=model,
             messages=chat_messages,
@@ -279,15 +279,24 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
         print(f"[llm.py] request too large, retrying with trimmed context: {err[:200]}")
         trimmed_system = _build_system_content(search_results, max_chars=150, latest_query=latest_query)
         chat_messages = [{"role": "system", "content": trimmed_system}] + messages
-        completion = client.chat.completions.create(
-            model=model,
-            messages=chat_messages,
-            temperature=temperature,
-            max_tokens=500,
-            frequency_penalty=0.4,
-        )
+        try:
+            completion = client.chat.completions.create(
+                model=model,
+                messages=chat_messages,
+                temperature=temperature,
+                max_tokens=500,
+                frequency_penalty=0.4,
+            )
+        except Exception as retry_err:
+            print(f"[llm.py] trimmed retry also failed: {str(retry_err)[:200]}")
+            return {
+                "text": "I hit an API limit and couldn't recover even after trimming context — please try again with a narrower question.",
+                "sources": search_results,
+                "status": "LIMITED",
+                "model": model,
+            }
 
-        text = completion.choices[0].message.content
+    text = completion.choices[0].message.content
 
     if not text or not text.strip():
         text = "I retrieved search results but couldn't generate a written summary — please try rephrasing or asking again."
