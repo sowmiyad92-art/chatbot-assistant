@@ -96,14 +96,9 @@ import calendar
 
 
 def _timeframe_range(query, today):
-    """
-    Detect a timeframe phrase in the query and compute its exact date range
-    against `today`, so the model can do a plain date comparison instead of
-    reasoning abstractly about what 'this month' means — that reasoning was
-    observed to fail (e.g. calling June 3 'within this month' when today was
-    July 17). Returns (label, start_date, end_date) or None if no phrase found.
-    """
     q = query.lower()
+    if "today" in q:
+        return "today", today, today
     if "next month" in q:
         year = today.year + (1 if today.month == 12 else 0)
         month = 1 if today.month == 12 else today.month + 1
@@ -292,12 +287,11 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
             frequency_penalty=0.4,
         )
 
-    text = completion.choices[0].message.content
+        text = completion.choices[0].message.content
 
-    # Detect the model admitting the search results weren't actually useful —
-    # count-based VERIFIED/LIMITED doesn't know this, so without this check a
-    # handful of irrelevant sources (e.g. wrong-language YouTube results) still
-    # gets labeled VERIFIED even though the model explicitly said it found nothing.
+    if not text or not text.strip():
+        text = "I retrieved search results but couldn't generate a written summary — please try rephrasing or asking again."
+
     _NO_USEFUL_DATA_PHRASES = [
         "don't have any fresh search results",
         "don't have any search results",
@@ -307,7 +301,7 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
         "i'm not able to tell you",
         "no fresh search results",
     ]
-    model_found_nothing_useful = bool(search_results) and any(
+    model_found_nothing_useful = search_results and any(
         phrase in text.lower() for phrase in _NO_USEFUL_DATA_PHRASES
     )
 
