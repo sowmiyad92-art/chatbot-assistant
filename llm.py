@@ -258,7 +258,7 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
             model=model,
             messages=chat_messages,
             temperature=temperature,
-            max_tokens=700,
+            max_tokens=900,
             frequency_penalty=0.4,
         )
     except Exception as e:
@@ -308,6 +308,7 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
         "couldn't find any",
         "couldn't locate any",
         "i'm not able to tell you",
+        "i'm not finding any",
         "no fresh search results",
     ]
     model_found_nothing_useful = search_results and any(
