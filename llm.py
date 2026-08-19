@@ -199,11 +199,6 @@ def _build_system_content(search_results, max_chars=None, search_attempted=False
             "just to pad the list up to the requested count:\n\n" + _build_search_context(search_results, max_chars)
         )
     elif search_attempted:
-        # A search was actually run (YouTube API, Exa, or Tavily) but came
-        # back with nothing usable. Without this, the model has no idea a
-        # search even happened and will improvise a plausible-sounding
-        # answer as if it searched — exactly the hallucination-with-no-data
-        # failure this whole grounding system exists to prevent.
         system_content += (
             "\n\n[Internal note, not for the user: a live search was "
             "attempted but returned no usable results.] You do NOT have any "
@@ -215,12 +210,6 @@ def _build_system_content(search_results, max_chars=None, search_attempted=False
             "paraphrase this note itself or reference 'this turn' as a phrase."
         )
     else:
-        # No search was attempted this turn at all (Off mode, or Auto decided
-        # it wasn't needed). If the question actually calls for specific,
-        # verifiable real-time data (exact view counts, current rankings,
-        # today's news, precise statistics), the model has no way to know
-        # those numbers from training and must not invent plausible-sounding
-        # ones — that's confident fabrication, not "answering from knowledge."
         system_content += (
             "\n\n[Internal note, not for the user: no live search ran this "
             "turn.] If the user's question requires specific, verifiable "
@@ -242,20 +231,19 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
     messages: list of {"role": "user"/"assistant", "content": "..."}
     search_results: optional list of {"title","url","content"} from search.search_web
     search_attempted: pass True whenever search_web() was actually called this
-        turn, regardless of whether it returned results. Lets the model know
-        the difference between "search wasn't needed" and "search ran and
-        found nothing" — without it, an empty search silently falls back to
-        the model improvising an answer as if it had real data.
+        turn, regardless of whether it returned results.
 
     Returns a dict:
         {
-            "text": str,              # the answer, no inline URLs
-            "sources": list | None,   # the raw search_results passed in, for the UI panel
+            "text": str,
+            "sources": list | None,
             "status": "VERIFIED" | "LIMITED" | "NONE",
             "model": str,
         }
-    Status is a simple source-count heuristic — swap in a real confidence
-    check later (e.g. did the model's claims actually match source content).
+    Status starts as a source-count heuristic, then gets downgraded if the
+    model's own answer signals it couldn't actually use the sources it was
+    given (e.g. irrelevant/wrong-language results) — see
+    `model_found_nothing_useful` below.
     """
     latest_query = None
     for m in reversed(messages):
@@ -268,10 +256,6 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
     )
     chat_messages = [{"role": "system", "content": system_content}] + messages
 
-    # Lower temperature for grounded (search-backed) answers — reduces the
-    # rambling/self-correcting behavior that shows up when the model has to
-    # reconcile multiple sources at higher randomness. Ungrounded, more
-    # conversational replies keep the higher temperature.
     temperature = 0.3 if search_results else 0.7
 
     try:
@@ -279,8 +263,8 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
             model=model,
             messages=chat_messages,
             temperature=temperature,
-            max_tokens=700,       # hard cap — safety net against repetition-loop runaway output
-            frequency_penalty=0.4,  # penalize repeated tokens/phrases, small models are prone to looping
+            max_tokens=700,
+            frequency_penalty=0.4,
         )
     except Exception as e:
         err = str(e)
@@ -297,8 +281,6 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
         )
         if not too_large:
             raise
-        # Request exceeded the TPM limit — retry once with heavily trimmed
-        # source content instead of surfacing a raw API error to the user.
         print(f"[llm.py] request too large, retrying with trimmed context: {err[:200]}")
         trimmed_system = _build_system_content(search_results, max_chars=150, latest_query=latest_query)
         chat_messages = [{"role": "system", "content": trimmed_system}] + messages
@@ -312,8 +294,27 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
 
     text = completion.choices[0].message.content
 
+    # Detect the model admitting the search results weren't actually useful —
+    # count-based VERIFIED/LIMITED doesn't know this, so without this check a
+    # handful of irrelevant sources (e.g. wrong-language YouTube results) still
+    # gets labeled VERIFIED even though the model explicitly said it found nothing.
+    _NO_USEFUL_DATA_PHRASES = [
+        "don't have any fresh search results",
+        "don't have any search results",
+        "no results found",
+        "couldn't find any",
+        "couldn't locate any",
+        "i'm not able to tell you",
+        "no fresh search results",
+    ]
+    model_found_nothing_useful = bool(search_results) and any(
+        phrase in text.lower() for phrase in _NO_USEFUL_DATA_PHRASES
+    )
+
     if not search_results:
         status = "NONE"
+    elif model_found_nothing_useful:
+        status = "LIMITED"
     elif len(search_results) >= 2:
         status = "VERIFIED"
     else:

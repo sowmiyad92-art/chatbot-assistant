@@ -36,7 +36,7 @@ def _get_with_retry(url, params, timeout=10, retries=1):
 
 
 YOUTUBE_KEYWORDS = [
-    "view", "views", "trending", "most viewed", "most-viewed",
+    "view", "views", "most viewed", "most-viewed",
     "most watched", "most-watched", "top video", "top videos",
     "youtube", "subscriber", "subscribers",
 ]
