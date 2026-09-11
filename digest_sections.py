@@ -1,10 +1,12 @@
 # digest_sections.py — section builders for the daily digest
 
 from datetime import date
-import random
+import llm
+import search
+import youtube as yt_search  # existing module, has search_youtube()
 
 # ---------------------------------------------------------------------
-# Static config (no live scraping — set once, rotate/reuse daily)
+# Static config
 # ---------------------------------------------------------------------
 
 YOUTUBE_CHANNELS = {
@@ -33,132 +35,84 @@ GITA_QUOTES = [
 ]
 
 # ---------------------------------------------------------------------
-# 1. Job-prep questions (Groq-generated, AI Automation Specialist angle)
+# 1. Job-prep questions (Groq via llm.get_response)
 # ---------------------------------------------------------------------
 
-def build_job_questions(config: dict, scheduled_query_id: str) -> str:
-    """5 AI Automation Specialist interview-prep questions, LLM-generated."""
-    from llm import ask_groq  # existing Aadsia helper
-
+def build_job_questions(config, scheduled_query_id):
     prompt = (
         "Generate 5 realistic interview questions for an AI Automation "
         "Specialist role — mix of technical (LLM APIs, pipelines, "
-        "automation tooling) and scenario-based. One line each, numbered."
+        "automation tooling) and scenario-based. One line each, numbered. "
+        "No preamble."
     )
-    return ask_groq(prompt)
+    result = llm.get_response([{"role": "user", "content": prompt}])
+    return result["text"]
 
 
 # ---------------------------------------------------------------------
-# 2. AI news (search-based, delta-checked against yesterday)
+# 2 & 3 & 5. Search-based sections (AI news / tool launches / world news)
 # ---------------------------------------------------------------------
 
-def build_ai_news(config: dict, scheduled_query_id: str) -> str:
-    from search import tavily_search
-    from db import get_yesterday_payload
+def _search_and_format(query, max_results=5):
+    results, provider = search.search_web(query, max_results=max_results, provider="tavily")
+    if not results:
+        return "Nothing found today."
+    return "\n".join(f"- {r['title']}" for r in results)
 
-    results = tavily_search("AI news today", max_results=8)
-    yesterday = get_yesterday_payload(scheduled_query_id, "ai_news")
-    fresh = _dedupe_against_yesterday(results, yesterday)
-    top5 = fresh[:5]
-    return _format_bullets(top5)
+def build_ai_news(config, scheduled_query_id):
+    return _search_and_format("AI news today")
 
+def build_ai_tool_launches(config, scheduled_query_id):
+    return _search_and_format("new AI tool or model launch today")
 
-# ---------------------------------------------------------------------
-# 3. New AI tool/model launches (same pattern, narrower query)
-# ---------------------------------------------------------------------
-
-def build_ai_tool_launches(config: dict, scheduled_query_id: str) -> str:
-    from search import tavily_search
-    from db import get_yesterday_payload
-
-    results = tavily_search("new AI tool OR model launch today", max_results=8)
-    yesterday = get_yesterday_payload(scheduled_query_id, "ai_tool_launches")
-    fresh = _dedupe_against_yesterday(results, yesterday)
-    return _format_bullets(fresh[:5])
+def build_world_trending_news(config, scheduled_query_id):
+    return _search_and_format("world trending news today stock market climate")
 
 
 # ---------------------------------------------------------------------
-# 4. Movies releasing today (theatres/OTT)
+# 4. Movies releasing today
 # ---------------------------------------------------------------------
 
-def build_movies(config: dict, scheduled_query_id: str) -> str:
-    from search import tavily_search
-
+def build_movies(config, scheduled_query_id):
     today_str = date.today().strftime("%B %d, %Y")
-    query = f"movies releasing today {today_str} theatres OTT"
-    results = tavily_search(query, max_results=5)
-    return _format_bullets(results)
+    return _search_and_format(f"movies releasing today {today_str} theatres OTT")
 
 
 # ---------------------------------------------------------------------
-# 5. World trending news (top 5 — stock market, climate, etc.)
+# 6. YouTube — latest upload from the 4 tracked channels + short summary
 # ---------------------------------------------------------------------
 
-def build_world_trending_news(config: dict, scheduled_query_id: str) -> str:
-    from search import tavily_search
-    from db import get_yesterday_payload
-
-    results = tavily_search("world trending news today stock market climate", max_results=8)
-    yesterday = get_yesterday_payload(scheduled_query_id, "world_trending_news")
-    fresh = _dedupe_against_yesterday(results, yesterday)
-    return _format_bullets(fresh[:5])
-
-
-# ---------------------------------------------------------------------
-# 6. YouTube video + short summary (title+description only, no transcript)
-# ---------------------------------------------------------------------
-
-def build_youtube(config: dict, scheduled_query_id: str) -> str:
-    from youtube import get_latest_video_per_channel  # wraps YouTube Data API
-    from llm import ask_groq
-    from db import get_yesterday_payload
+def build_youtube(config, scheduled_query_id):
+    # NOTE: youtube.py currently has no "latest video for a known channel_id"
+    # helper — search_youtube() is query/handle driven, not channel_id driven.
+    # This needs a small new function in youtube.py: get_latest_upload(channel_id)
+    from youtube import get_latest_upload  # to be added
 
     candidates = []
     for name, channel_id in YOUTUBE_CHANNELS.items():
-        video = get_latest_video_per_channel(channel_id)
+        video = get_latest_upload(channel_id)
         if video:
             candidates.append({**video, "channel": name})
 
-    yesterday = get_yesterday_payload(scheduled_query_id, "youtube")
-    fresh = [v for v in candidates if v["video_id"] != yesterday.get("video_id")]
+    if not candidates:
+        return "No video found today."
 
-    if not fresh:
-        return "No new video today from the tracked channels."
-
-    # simple pick: most recently published
-    pick = max(fresh, key=lambda v: v["published_at"])
+    pick = max(candidates, key=lambda v: v["published_at"])
 
     summary_prompt = (
-        f"Title: {pick['title']}\nDescription: {pick['description'][:500]}\n\n"
+        f"Title: {pick['title']}\nDescription: {pick.get('description', '')[:500]}\n\n"
         "Summarize this video in 2 short sentences."
     )
-    summary = ask_groq(summary_prompt)
+    summary = llm.get_response([{"role": "user", "content": summary_prompt}])["text"]
 
     return f"{pick['title']} ({pick['channel']})\n{summary}\n{pick['url']}"
 
 
 # ---------------------------------------------------------------------
-# 7. Gita quote of the day (static list, rotates by day-of-year)
+# 7. Gita quote of the day (static, rotates)
 # ---------------------------------------------------------------------
 
-def build_gita_quote(config: dict, scheduled_query_id: str) -> str:
+def build_gita_quote(config, scheduled_query_id):
     day_index = date.today().timetuple().tm_yday
-    quote = GITA_QUOTES[day_index % len(GITA_QUOTES)]
-    return f'"{quote["text"]}" — Bhagavad Gita {quote["ref"]}'
-
-
-# ---------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------
-
-def _dedupe_against_yesterday(results: list, yesterday_payload) -> list:
-    yesterday_titles = set()
-    if isinstance(yesterday_payload, str):
-        yesterday_titles = {line.strip() for line in yesterday_payload.split("\n")}
-    return [r for r in results if r.get("title") not in yesterday_titles]
-
-
-def _format_bullets(results: list) -> str:
-    if not results:
-        return "Nothing new since yesterday."
-    return "\n".join(f"- {r['title']}" for r in results)
+    q = GITA_QUOTES[day_index % len(GITA_QUOTES)]
+    return f'"{q["text"]}" — Bhagavad Gita {q["ref"]}'
