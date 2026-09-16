@@ -42,8 +42,9 @@ def build_job_questions(config, scheduled_query_id):
     prompt = (
         "Generate 5 realistic interview questions for an AI Automation "
         "Specialist role — mix of technical (LLM APIs, pipelines, "
-        "automation tooling) and scenario-based. One line each, numbered. "
-        "No preamble."
+        "automation tooling) and scenario-based. For each question, give "
+        "a concise model answer (3-4 sentences) right after it. "
+        "Format: numbered question, then 'A:' on the next line. No preamble."
     )
     result = llm.get_response([{"role": "user", "content": prompt}])
     return result["text"]
