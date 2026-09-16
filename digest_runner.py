@@ -26,6 +26,14 @@ SECTION_HEADERS = {
     "world_trending_news": "🌍 World Trending",
 }
 
+# Sections where we run a "skip if unchanged from yesterday" delta check.
+# The literal failure string below must never be treated as "unchanged" —
+# otherwise a broken search on day 1 poisons yesterday's payload and
+# silently suppresses the section (header included) on day 2 even once
+# the search is fixed and returning real content.
+DELTA_CHECKED_SECTIONS = ("ai_news", "ai_tool_launches", "world_trending_news", "youtube")
+FAILURE_STRING = "Nothing found today."
+
 
 def send_telegram_message(chat_id, text):
     token = os.environ["TELEGRAM_BOT_TOKEN"]
@@ -60,10 +68,14 @@ def run_digest():
                 continue
             try:
                 result = SECTION_BUILDERS[key](config, config_id)
+
                 # simple delta check: skip if identical to yesterday's content
-                if key in ("ai_news", "ai_tool_launches", "world_trending_news", "youtube"):
-                    if result == yesterday.get(key):
-                        result = None  # nothing new today
+                if key in DELTA_CHECKED_SECTIONS:
+                    if result == FAILURE_STRING:
+                        pass  # always show a failed/empty search, never suppress as "duplicate"
+                    elif result == yesterday.get(key):
+                        result = None  # genuinely unchanged content — skip
+
                 payload[key] = result
             except Exception as e:
                 print(f"[digest_runner] section '{key}' failed: {e}")
