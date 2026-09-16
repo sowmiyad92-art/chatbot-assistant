@@ -1,4 +1,7 @@
-# digest_sections.py — section builders for the daily digest
+# digest_sections.py — full file
+# Fix: provider="tavily" (no fallback, silent) -> provider="auto" (Exa -> Tavily fallback)
+# Plus: error/empty logging instead of silent "Nothing found today"
+# Plus: build_youtube uses transcript, falls back to description
 
 from datetime import date
 import llm
@@ -55,8 +58,17 @@ def build_job_questions(config, scheduled_query_id):
 # ---------------------------------------------------------------------
 
 def _search_and_format(query, max_results=5):
-    results, provider = search.search_web(query, max_results=max_results, provider="tavily")
+    try:
+        # FIX: was provider="tavily" — forced Tavily with zero fallback,
+        # so a missing/bad TAVILY_API_KEY silently returned nothing even
+        # when Exa was configured and working. "auto" tries Exa first,
+        # then Tavily, matching how the chat assistant already searches.
+        results, provider = search.search_web(query, max_results=max_results, provider="auto")
+    except Exception as e:
+        print(f"[digest_sections.py] search_web raised for {query!r}: {e}")
+        return "Nothing found today."
     if not results:
+        print(f"[digest_sections.py] search_web returned empty for {query!r} (provider={provider})")
         return "Nothing found today."
     return "\n".join(f"- {r['title']}" for r in results)
 
@@ -76,17 +88,24 @@ def build_world_trending_news(config, scheduled_query_id):
 
 def build_movies(config, scheduled_query_id):
     today_str = date.today().strftime("%B %d, %Y")
-    
-    results, provider = search.search_web(
-        f"movies releasing {today_str} theatrical OTT streaming",
-        max_results=8,
-        provider="tavily"
-    )
-    if not results:
+
+    try:
+        # FIX: same provider="tavily" -> "auto" issue as _search_and_format
+        results, provider = search.search_web(
+            f"movies releasing {today_str} theatrical OTT streaming",
+            max_results=8,
+            provider="auto"
+        )
+    except Exception as e:
+        print(f"[digest_sections.py] search_web raised for movies query: {e}")
         return "Nothing found today."
-    
+
+    if not results:
+        print(f"[digest_sections.py] search_web returned empty for movies query (provider={provider})")
+        return "Nothing found today."
+
     raw_titles = "\n".join(f"- {r['title']}" for r in results)
-    
+
     prompt = f"""From these search results about movies releasing on {today_str}, 
 extract only actual feature film releases (skip trailers, re-releases, TV episodes).
 Group into "Theatrical" and "Streaming/OTT" sections. If a detail (genre, language, 
@@ -94,20 +113,17 @@ platform) isn't available, omit it rather than guessing.
 
 Search results:
 {raw_titles}"""
-    
+
     result = llm.get_response([{"role": "user", "content": prompt}])
     return result["text"]
 
 
 # ---------------------------------------------------------------------
-# 6. YouTube — latest upload from the 4 tracked channels + short summary
+# 6. YouTube — latest upload from the 4 tracked channels + transcript summary
 # ---------------------------------------------------------------------
 
 def build_youtube(config, scheduled_query_id):
-    # NOTE: youtube.py currently has no "latest video for a known channel_id"
-    # helper — search_youtube() is query/handle driven, not channel_id driven.
-    # This needs a small new function in youtube.py: get_latest_upload(channel_id)
-    from youtube import get_latest_upload  # to be added
+    from youtube import get_latest_upload, get_transcript
 
     candidates = []
     for name, channel_id in YOUTUBE_CHANNELS.items():
@@ -119,12 +135,19 @@ def build_youtube(config, scheduled_query_id):
         return "No video found today."
 
     pick = max(candidates, key=lambda v: v["published_at"])
+    video_id = pick["url"].split("v=")[-1]
 
-    summary_prompt = (
-        f"Title: {pick['title']}\nDescription: {pick.get('description', '')[:500]}\n\n"
-        "Summarize this video in 2 short sentences."
-    )
-    summary = llm.get_response([{"role": "user", "content": summary_prompt}])["text"]
+    transcript_text = get_transcript(video_id)
+    source_text = transcript_text or pick.get("description", "")[:500]
+
+    if not source_text:
+        summary = "(no transcript or description available)"
+    else:
+        summary_prompt = (
+            f"Title: {pick['title']}\nContent: {source_text}\n\n"
+            "Summarize this video in 2 short sentences."
+        )
+        summary = llm.get_response([{"role": "user", "content": summary_prompt}])["text"]
 
     return f"{pick['title']} ({pick['channel']})\n{summary}\n{pick['url']}"
 
