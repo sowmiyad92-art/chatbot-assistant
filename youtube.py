@@ -338,3 +338,37 @@ def search_youtube(query, max_results=5):
     except Exception as e:
         print(f"[youtube.py] search_youtube unexpected exception: {e}")
         return None
+
+def get_latest_upload(channel_id, key=None):
+    """
+    Returns the single most recent upload for a known channel_id, as
+    {"title","url","description","published_at"}, or None on failure/empty.
+    Unlike search_youtube(), takes a channel_id directly (no name resolution,
+    no view-count ranking) — playlist order is already newest-first.
+    """
+    key = key or get_youtube_key()
+    if not key:
+        print("[youtube.py] no YOUTUBE_API_KEY configured")
+        return None
+
+    playlist_id = _uploads_playlist_id(channel_id, key)
+    if not playlist_id:
+        print(f"[youtube.py] no uploads playlist for channel_id={channel_id!r}")
+        return None
+
+    video_ids = _playlist_video_ids(playlist_id, key, max_pages=1, page_size=1)
+    if not video_ids:
+        print(f"[youtube.py] no videos in uploads playlist={playlist_id!r}")
+        return None
+
+    video_items = _videos_with_stats(video_ids, key)
+    if not video_items:
+        return None
+
+    snippet = video_items[0].get("snippet", {})
+    return {
+        "title": snippet.get("title", "Untitled"),
+        "url": f"https://www.youtube.com/watch?v={video_items[0]['id']}",
+        "description": snippet.get("description", ""),
+        "published_at": snippet.get("publishedAt", ""),
+    }

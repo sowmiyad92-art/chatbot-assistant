@@ -182,3 +182,40 @@ def get_search_usage_stats(months_back=6):
         stats[provider]["by_month"][month_key] = stats[provider]["by_month"].get(month_key, 0) + 1
 
     return stats
+
+def get_active_scheduled_queries():
+    """Fetch all active digest configs to run today."""
+    res = supabase.table("scheduled_queries").select("*").eq("active", True).execute()
+    return res.data
+
+
+def save_digest_run(scheduled_query_id, payload, delivered=False, telegram_message_id=None):
+    """Log one full digest run (all sections in payload jsonb)."""
+    result = supabase.table("digest_runs").insert({
+        "scheduled_query_id": scheduled_query_id,
+        "payload": payload,          # e.g. {"ai_news": "...", "youtube": {...}, ...}
+        "delivered": delivered,
+        "telegram_message_id": telegram_message_id,
+    }).execute()
+    return result.data[0]["id"]
+
+
+def update_last_run(scheduled_query_id, status="success"):
+    """Update scheduled_queries pointer after a run."""
+    supabase.table("scheduled_queries").update({
+        "last_run_at": datetime.now(timezone.utc).isoformat(),
+        "last_status": status,
+    }).eq("id", scheduled_query_id).execute()
+
+
+def get_yesterday_payload(scheduled_query_id):
+    """Most recent prior run's payload, for delta comparison."""
+    res = (
+        supabase.table("digest_runs")
+        .select("payload")
+        .eq("scheduled_query_id", scheduled_query_id)
+        .order("run_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return res.data[0]["payload"] if res.data else None
