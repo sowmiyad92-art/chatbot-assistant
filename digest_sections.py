@@ -76,7 +76,27 @@ def build_world_trending_news(config, scheduled_query_id):
 
 def build_movies(config, scheduled_query_id):
     today_str = date.today().strftime("%B %d, %Y")
-    return _search_and_format(f"movies releasing today {today_str} theatres OTT")
+    
+    results, provider = search.search_web(
+        f"movies releasing {today_str} theatrical OTT streaming",
+        max_results=8,
+        provider="tavily"
+    )
+    if not results:
+        return "Nothing found today."
+    
+    raw_titles = "\n".join(f"- {r['title']}" for r in results)
+    
+    prompt = f"""From these search results about movies releasing on {today_str}, 
+extract only actual feature film releases (skip trailers, re-releases, TV episodes).
+Group into "Theatrical" and "Streaming/OTT" sections. If a detail (genre, language, 
+platform) isn't available, omit it rather than guessing.
+
+Search results:
+{raw_titles}"""
+    
+    result = llm.get_response([{"role": "user", "content": prompt}])
+    return result["text"]
 
 
 # ---------------------------------------------------------------------
