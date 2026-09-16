@@ -306,15 +306,15 @@ def get_latest_upload(channel_id, key=None):
     }
 
 
-# --- NEW: transcript-based summary source, for digest_sections.build_youtube ---
+# youtube.py — replace get_transcript with:
 
 def get_transcript(video_id, max_chars=500):
     """Returns first ~max_chars of transcript text, or None if unavailable."""
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
-        from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
-        text = " ".join(seg["text"] for seg in transcript)
+        ytt_api = YouTubeTranscriptApi()
+        fetched = ytt_api.fetch(video_id)
+        text = " ".join(snippet.text for snippet in fetched)
         return text[:max_chars]
     except Exception as e:
         print(f"[youtube.py] get_transcript failed for video_id={video_id!r}: {e}")
