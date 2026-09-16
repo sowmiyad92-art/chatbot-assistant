@@ -35,17 +35,43 @@ DELTA_CHECKED_SECTIONS = ("ai_news", "ai_tool_launches", "world_trending_news", 
 FAILURE_STRING = "Nothing found today."
 
 
+# digest_runner.py
+
+TELEGRAM_MAX_LEN = 4096
+
 def send_telegram_message(chat_id, text):
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    resp = requests.post(url, json={
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": True,
-    })
-    resp.raise_for_status()
-    return resp.json()["result"]["message_id"]
+
+    # Telegram rejects messages over 4096 chars outright (400 Bad Request).
+    # Split on paragraph boundaries so we send multiple messages instead
+    # of silently failing the whole digest.
+    chunks = []
+    current = ""
+    for para in text.split("\n\n"):
+        if len(current) + len(para) + 2 > TELEGRAM_MAX_LEN:
+            if current:
+                chunks.append(current)
+            current = para
+        else:
+            current = f"{current}\n\n{para}" if current else para
+    if current:
+        chunks.append(current)
+
+    last_message_id = None
+    for chunk in chunks:
+        resp = requests.post(url, json={
+            "chat_id": chat_id,
+            "text": chunk,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        })
+        if resp.status_code != 200:
+            print(f"[digest_runner] telegram send failed: {resp.status_code} {resp.text}")
+        resp.raise_for_status()
+        last_message_id = resp.json()["result"]["message_id"]
+
+    return last_message_id
 
 
 def run_digest():
