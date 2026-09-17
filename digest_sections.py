@@ -100,10 +100,10 @@ def build_movies(config, scheduled_query_id):
             max_results=6,
             provider="auto",
             extra_domains=[
-                "movieinsider.com", "firstshowing.net", "boxofficemojo.com",
-                "imdb.com", "themoviedb.org",
+                "themoviebox.net", "screencrush.com", "mashable.com",
+                "boxofficemojo.com", "imdb.com", "themoviedb.org",
             ],
-            content_chars=2000,
+            content_chars=3000,
         )
     except Exception as e:
         print(f"[digest_sections.py] search_web raised for movies query: {e}")
