@@ -109,7 +109,8 @@ def build_movies(config, scheduled_query_id):
     for row in table.find_all("tr")[1:]:  # skip header row
         cells = row.find_all("td")
         if cells:
-            title = cells[0].get_text(strip=True)
+            link = cells[0].find("a")
+            title = link.get_text(strip=True) if link else cells[0].get_text(strip=True)
             if title:
                 titles.append(title)
 
