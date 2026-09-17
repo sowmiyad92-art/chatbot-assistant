@@ -95,15 +95,16 @@ def build_movies(config, scheduled_query_id):
         # NOTE: content_chars raised to 2000 — these are long list pages;
         # the default 300-400 char snippet cuts off before reaching
         # today's entries.
-        results, provider = search.search_web(
-            f"movies releasing this week {month_str} theatrical streaming OTT release calendar",
+            results, provider = search.search_web(
+            f"new movie releases this week {month_str} theatrical streaming",
             max_results=6,
             provider="auto",
             extra_domains=[
-                "themoviebox.net", "screencrush.com", "mashable.com",
-                "boxofficemojo.com", "imdb.com", "themoviedb.org",
+                "the-numbers.com", "boxofficemojo.com", "cinemaunited.org",
+                "imdb.com", "themoviedb.org",
             ],
-            content_chars=3000,
+            content_chars=2500,
+        )
         )
     except Exception as e:
         print(f"[digest_sections.py] search_web raised for movies query: {e}")
