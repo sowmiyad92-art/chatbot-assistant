@@ -1,7 +1,4 @@
 # digest_sections.py — full file
-# Fix: provider="tavily" (no fallback, silent) -> provider="auto" (Exa -> Tavily fallback)
-# Plus: error/empty logging instead of silent "Nothing found today"
-# Plus: build_youtube uses transcript, falls back to description
 
 from datetime import date
 import llm
@@ -57,13 +54,11 @@ def build_job_questions(config, scheduled_query_id):
 # 2 & 3 & 5. Search-based sections (AI news / tool launches / world news)
 # ---------------------------------------------------------------------
 
-def _search_and_format(query, max_results=5):
+def _search_and_format(query, max_results=5, recency_days=1):
     try:
-        # FIX: was provider="tavily" — forced Tavily with zero fallback,
-        # so a missing/bad TAVILY_API_KEY silently returned nothing even
-        # when Exa was configured and working. "auto" tries Exa first,
-        # then Tavily, matching how the chat assistant already searches.
-        results, provider = search.search_web(query, max_results=max_results, provider="auto")
+        results, provider = search.search_web(
+            query, max_results=max_results, provider="auto", recency_days=recency_days
+        )
     except Exception as e:
         print(f"[digest_sections.py] search_web raised for {query!r}: {e}")
         return "Nothing found today."
@@ -90,11 +85,12 @@ def build_movies(config, scheduled_query_id):
     today_str = date.today().strftime("%B %d, %Y")
 
     try:
-        # FIX: same provider="tavily" -> "auto" issue as _search_and_format
         results, provider = search.search_web(
             f"movies releasing {today_str} theatrical OTT streaming",
             max_results=8,
-            provider="auto"
+            provider="auto",
+            recency_days=3,  # wider window than news — release-calendar pages
+                             # get published a few days ahead of the date itself
         )
     except Exception as e:
         print(f"[digest_sections.py] search_web raised for movies query: {e}")
@@ -109,7 +105,8 @@ def build_movies(config, scheduled_query_id):
     prompt = f"""From these search results about movies releasing on {today_str}, 
 extract only actual feature film releases (skip trailers, re-releases, TV episodes).
 Group into "Theatrical" and "Streaming/OTT" sections. If a detail (genre, language, 
-platform) isn't available, omit it rather than guessing.
+platform) isn't available, omit it rather than guessing. If none of the results are
+actual film releases for this date, say so plainly instead of guessing.
 
 Search results:
 {raw_titles}"""
