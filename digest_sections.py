@@ -1,6 +1,9 @@
 # digest_sections.py — full file
 
 from datetime import date
+import requests
+from bs4 import BeautifulSoup
+
 import llm
 import search
 import youtube as yt_search  # existing module, has search_youtube()
@@ -84,52 +87,38 @@ def build_world_trending_news(config, scheduled_query_id):
 def build_movies(config, scheduled_query_id):
     today = date.today()
     today_str = today.strftime("%B %d, %Y")
-    month_str = today.strftime("%B %Y")  # e.g. "September 2026"
-
+    calendar_url = f"https://www.boxofficemojo.com/calendar/{today.strftime('%Y-%m-%d')}/"
     try:
-        # NOTE: no recency_days — that forces Tavily's news-only index, and
-        # movie release calendars aren't classified as news articles.
-        # NOTE: query widened to "this week" + month, not the exact date —
-        # calendar sites group by week/month, and pinning to one exact day
-        # returns far fewer usable hits.
-        # NOTE: content_chars raised to 2500 — these are long list pages;
-        # the default 300-400 char snippet cuts off before reaching
-        # today's entries.
-        results, provider = search.search_web(
-            f"new movie releases this week {month_str} theatrical streaming",
-            max_results=6,
-            provider="auto",
-            extra_domains=[
-                "the-numbers.com", "boxofficemojo.com", "cinemaunited.org",
-                "imdb.com", "themoviedb.org",
-            ],
-            content_chars=2500,
+        resp = requests.get(
+            calendar_url,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=10,
         )
+        resp.raise_for_status()
     except Exception as e:
-        print(f"[digest_sections.py] search_web raised for movies query: {e}")
+        print(f"[digest_sections.py] Box Office Mojo fetch failed: {e}")
         return "Nothing found today."
 
-    if not results:
-        print(f"[digest_sections.py] search_web returned empty for movies query (provider={provider})")
+    soup = BeautifulSoup(resp.text, "html.parser")
+    table = soup.find("table")
+    if not table:
+        print(f"[digest_sections.py] No table found on {calendar_url}")
         return "Nothing found today."
 
-    raw_titles = "\n\n".join(f"[{r['title']}]({r['url']})\n{r['content']}" for r in results)
-    print(f"[digest_sections.py] movies raw_titles (first 800 chars):\n{raw_titles[:800]}")
+    titles = []
+    for row in table.find_all("tr")[1:]:  # skip header row
+        cells = row.find_all("td")
+        if cells:
+            title = cells[0].get_text(strip=True)
+            if title:
+                titles.append(title)
 
-    prompt = f"""Today's date is {today_str}. Below are excerpts from movie release
-calendar pages covering this general period.
+    if not titles:
+        print(f"[digest_sections.py] Table found but no titles parsed for {calendar_url}")
+        return "Nothing found today."
 
-From these excerpts, extract feature films releasing this week (on or within a
-few days of {today_str}), skipping trailers and TV episodes. Group into
-"Theatrical" and "Streaming/OTT" sections. If a detail (genre, language,
-platform) isn't available, omit it rather than guessing. If the excerpts
-don't mention any films releasing this week at all, say so plainly.
-
-Source excerpts:
-{raw_titles}"""
-
-    result = llm.get_response([{"role": "user", "content": prompt}])
-    return result["text"]
+    formatted = "\n".join(f"- {t}" for t in titles[:15])
+    return f"**Theatrical (week of {today_str}):**\n{formatted}"
 
 
 # ---------------------------------------------------------------------
