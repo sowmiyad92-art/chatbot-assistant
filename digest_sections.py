@@ -85,12 +85,18 @@ def build_movies(config, scheduled_query_id):
     today_str = date.today().strftime("%B %d, %Y")
 
     try:
+        # NOTE: no recency_days here — that forces Tavily's news-only
+        # index, and movie release listings live on IMDb/JustWatch/etc,
+        # not news sites. Scope by domain instead, via extra_domains.
         results, provider = search.search_web(
             f"movies releasing {today_str} theatrical OTT streaming",
             max_results=8,
             provider="auto",
-            recency_days=3,  # wider window than news — release-calendar pages
-                             # get published a few days ahead of the date itself
+            extra_domains=[
+                "imdb.com", "themoviedb.org", "justwatch.com",
+                "rottentomatoes.com", "variety.com", "hollywoodreporter.com",
+                "boxofficemojo.com",
+            ],
         )
     except Exception as e:
         print(f"[digest_sections.py] search_web raised for movies query: {e}")
