@@ -111,7 +111,7 @@ def _search_exa(query, max_results, include_domains=None, start_published_date=N
         return None
 
 
-def _search_tavily(query, max_results, topic=None, days=None):
+def _search_tavily(query, max_results, topic=None, days=None, include_domains=None):
     key = get_tavily_key()
     if not key:
         return None
@@ -122,6 +122,8 @@ def _search_tavily(query, max_results, topic=None, days=None):
             kwargs["topic"] = topic  # "news" enables recency filtering below
         if days:
             kwargs["days"] = days    # only honored by Tavily when topic="news"
+        if include_domains:
+            kwargs["include_domains"] = include_domains
         results = client.search(query, **kwargs)
         structured = []
         for r in results.get("results", []):
@@ -136,7 +138,7 @@ def _search_tavily(query, max_results, topic=None, days=None):
         return None
 
 
-def search_web(query, max_results=4, provider="auto", recency_days=None):
+def search_web(query, max_results=4, provider="auto", recency_days=None, extra_domains=None):
     """
     Returns a tuple: (results, provider_used)
     - results: list of dicts [{"title", "url", "content"}, ...] or None
@@ -156,15 +158,24 @@ def search_web(query, max_results=4, provider="auto", recency_days=None):
     ("top 5", "top 10", "5 movies", etc.) — capped at 15.
 
     recency_days: optional int. When set, scopes results to roughly the
-    last N days instead of Exa/Tavily's default broad web index — use for
-    "today"/"latest" style queries (digest sections) where generic
-    topic/hub pages are otherwise returned instead of dated articles.
-    Leave None (default) for existing callers — behavior is unchanged.
+    last N days instead of Exa/Tavily's default broad web index, and on
+    Tavily also switches to topic="news" (news-article index only) — use
+    for "today"/"latest" NEWS-style queries. Do NOT use for queries whose
+    answer lives on non-news sites (e.g. movie listings on IMDb/JustWatch) —
+    use extra_domains for those instead. Leave None (default) for existing
+    callers — behavior is unchanged.
+
+    extra_domains: optional list of domains to scope the search to,
+    independent of the auto region detection — e.g. movie-listing sites
+    for the digest's movies section. Merged with any region-detected
+    domains if both apply. Works with both Exa and Tavily.
     """
     provider = (provider or "auto").lower()
     max_results = extract_max_results(query, fallback=max_results)
     region = _detect_region(query)
     include_domains = REGION_DOMAINS.get(region) if region else None
+    if extra_domains:
+        include_domains = list(set((include_domains or []) + extra_domains))
 
     start_published_date = None
     if recency_days:
@@ -178,7 +189,7 @@ def search_web(query, max_results=4, provider="auto", recency_days=None):
 
     if provider == "tavily":
         topic = "news" if recency_days else None
-        result = _search_tavily(query, max_results, topic=topic, days=recency_days)
+        result = _search_tavily(query, max_results, topic=topic, days=recency_days, include_domains=include_domains)
         return (result, "Tavily") if result else (None, None)
 
     if provider == "youtube":
@@ -195,7 +206,7 @@ def search_web(query, max_results=4, provider="auto", recency_days=None):
     if result:
         return result, "Exa"
     topic = "news" if recency_days else None
-    result = _search_tavily(query, max_results, topic=topic, days=recency_days)
+    result = _search_tavily(query, max_results, topic=topic, days=recency_days, include_domains=include_domains)
     if result:
         return result, "Tavily"
     return None, None
