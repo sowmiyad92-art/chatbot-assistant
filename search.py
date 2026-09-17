@@ -1,5 +1,8 @@
+# search.py — full file
+
 import os
 import re
+from datetime import datetime, timedelta
 from tavily import TavilyClient
 from exa_py import Exa
 from dotenv import load_dotenv
@@ -80,7 +83,7 @@ def _detect_region(query):
     return None
 
 
-def _search_exa(query, max_results, include_domains=None):
+def _search_exa(query, max_results, include_domains=None, start_published_date=None):
     key = get_exa_key()
     if not key:
         return None
@@ -92,6 +95,8 @@ def _search_exa(query, max_results, include_domains=None):
         }
         if include_domains:
             kwargs["include_domains"] = include_domains
+        if start_published_date:
+            kwargs["start_published_date"] = start_published_date
         response = client.search_and_contents(query, **kwargs)
         structured = []
         for r in response.results:
@@ -106,13 +111,18 @@ def _search_exa(query, max_results, include_domains=None):
         return None
 
 
-def _search_tavily(query, max_results):
+def _search_tavily(query, max_results, topic=None, days=None):
     key = get_tavily_key()
     if not key:
         return None
     try:
         client = TavilyClient(api_key=key)
-        results = client.search(query, max_results=max_results)
+        kwargs = {"max_results": max_results}
+        if topic:
+            kwargs["topic"] = topic  # "news" enables recency filtering below
+        if days:
+            kwargs["days"] = days    # only honored by Tavily when topic="news"
+        results = client.search(query, **kwargs)
         structured = []
         for r in results.get("results", []):
             structured.append({
@@ -126,7 +136,7 @@ def _search_tavily(query, max_results):
         return None
 
 
-def search_web(query, max_results=4, provider="auto"):
+def search_web(query, max_results=4, provider="auto", recency_days=None):
     """
     Returns a tuple: (results, provider_used)
     - results: list of dicts [{"title", "url", "content"}, ...] or None
@@ -144,18 +154,31 @@ def search_web(query, max_results=4, provider="auto"):
 
     max_results is overridden if the query itself specifies a count
     ("top 5", "top 10", "5 movies", etc.) — capped at 15.
+
+    recency_days: optional int. When set, scopes results to roughly the
+    last N days instead of Exa/Tavily's default broad web index — use for
+    "today"/"latest" style queries (digest sections) where generic
+    topic/hub pages are otherwise returned instead of dated articles.
+    Leave None (default) for existing callers — behavior is unchanged.
     """
     provider = (provider or "auto").lower()
     max_results = extract_max_results(query, fallback=max_results)
     region = _detect_region(query)
     include_domains = REGION_DOMAINS.get(region) if region else None
 
+    start_published_date = None
+    if recency_days:
+        start_published_date = (
+            datetime.utcnow() - timedelta(days=recency_days)
+        ).strftime("%Y-%m-%dT00:00:00.000Z")
+
     if provider == "exa":
-        result = _search_exa(query, max_results, include_domains)
+        result = _search_exa(query, max_results, include_domains, start_published_date)
         return (result, "Exa") if result else (None, None)
 
     if provider == "tavily":
-        result = _search_tavily(query, max_results)
+        topic = "news" if recency_days else None
+        result = _search_tavily(query, max_results, topic=topic, days=recency_days)
         return (result, "Tavily") if result else (None, None)
 
     if provider == "youtube":
@@ -168,10 +191,11 @@ def search_web(query, max_results=4, provider="auto"):
         if result:
             return result, "YouTube API"
 
-    result = _search_exa(query, max_results, include_domains)
+    result = _search_exa(query, max_results, include_domains, start_published_date)
     if result:
         return result, "Exa"
-    result = _search_tavily(query, max_results)
+    topic = "news" if recency_days else None
+    result = _search_tavily(query, max_results, topic=topic, days=recency_days)
     if result:
         return result, "Tavily"
     return None, None
