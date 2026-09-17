@@ -108,12 +108,12 @@ def build_movies(config, scheduled_query_id):
     titles = []
     for row in table.find_all("tr")[1:]:  # skip header row
         cells = row.find_all("td")
-        if cells:
-            print(f"[digest_sections.py] row cells[0] html: {cells[0]}")
-            link = cells[0].find("a")
-            itle = h3.get_text(strip=True) if h3 else cells[0].get_text(strip=True)
-            if title:
-                titles.append(title)
+        if not cells:
+            continue
+        h3 = cells[0].find("h3")
+        title = h3.get_text(strip=True) if h3 else cells[0].get_text(strip=True)
+        if title:
+            titles.append(title)
 
     if not titles:
         print(f"[digest_sections.py] Table found but no titles parsed for {calendar_url}")
