@@ -111,7 +111,7 @@ def build_movies(config, scheduled_query_id):
         if cells:
             print(f"[digest_sections.py] row cells[0] html: {cells[0]}")
             link = cells[0].find("a")
-            title = link.get_text(strip=True) if link else cells[0].get_text(strip=True)
+            itle = h3.get_text(strip=True) if h3 else cells[0].get_text(strip=True)
             if title:
                 titles.append(title)
 
