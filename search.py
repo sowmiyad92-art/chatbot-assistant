@@ -83,7 +83,7 @@ def _detect_region(query):
     return None
 
 
-def _search_exa(query, max_results, include_domains=None, start_published_date=None):
+def _search_exa(query, max_results, include_domains=None, start_published_date=None, max_characters=400):
     key = get_exa_key()
     if not key:
         return None
@@ -91,7 +91,7 @@ def _search_exa(query, max_results, include_domains=None, start_published_date=N
         client = Exa(api_key=key)
         kwargs = {
             "num_results": max_results,
-            "text": {"max_characters": 400},
+            "text": {"max_characters": max_characters},
         }
         if include_domains:
             kwargs["include_domains"] = include_domains
@@ -103,7 +103,7 @@ def _search_exa(query, max_results, include_domains=None, start_published_date=N
             structured.append({
                 "title": r.title or "Untitled",
                 "url": r.url or "",
-                "content": (r.text or "")[:600],
+                "content": (r.text or "")[:max_characters],
             })
         return structured if structured else None
     except Exception as e:
@@ -111,7 +111,7 @@ def _search_exa(query, max_results, include_domains=None, start_published_date=N
         return None
 
 
-def _search_tavily(query, max_results, topic=None, days=None, include_domains=None):
+def _search_tavily(query, max_results, topic=None, days=None, include_domains=None, content_chars=300):
     key = get_tavily_key()
     if not key:
         return None
@@ -130,7 +130,7 @@ def _search_tavily(query, max_results, topic=None, days=None, include_domains=No
             structured.append({
                 "title": r.get("title", "Untitled"),
                 "url": r.get("url", ""),
-                "content": r.get("content", "")[:300],
+                "content": r.get("content", "")[:content_chars],
             })
         return structured if structured else None
     except Exception as e:
@@ -138,7 +138,7 @@ def _search_tavily(query, max_results, topic=None, days=None, include_domains=No
         return None
 
 
-def search_web(query, max_results=4, provider="auto", recency_days=None, extra_domains=None):
+def search_web(query, max_results=4, provider="auto", recency_days=None, extra_domains=None, content_chars=None):
     """
     Returns a tuple: (results, provider_used)
     - results: list of dicts [{"title", "url", "content"}, ...] or None
@@ -161,14 +161,20 @@ def search_web(query, max_results=4, provider="auto", recency_days=None, extra_d
     last N days instead of Exa/Tavily's default broad web index, and on
     Tavily also switches to topic="news" (news-article index only) — use
     for "today"/"latest" NEWS-style queries. Do NOT use for queries whose
-    answer lives on non-news sites (e.g. movie listings on IMDb/JustWatch) —
-    use extra_domains for those instead. Leave None (default) for existing
+    answer lives on non-news sites (e.g. movie listings/calendars) — use
+    extra_domains for those instead. Leave None (default) for existing
     callers — behavior is unchanged.
 
     extra_domains: optional list of domains to scope the search to,
-    independent of the auto region detection — e.g. movie-listing sites
+    independent of the auto region detection — e.g. movie-calendar sites
     for the digest's movies section. Merged with any region-detected
     domains if both apply. Works with both Exa and Tavily.
+
+    content_chars: optional int, overrides the default content-snippet
+    length (400 for Exa, 300 for Tavily). Long listing/calendar pages
+    need a much bigger slice than a typical news article to reach the
+    relevant part of the page — pass a higher value (e.g. 2000) for
+    those queries. Leave None (default) for existing callers.
     """
     provider = (provider or "auto").lower()
     max_results = extract_max_results(query, fallback=max_results)
@@ -183,13 +189,16 @@ def search_web(query, max_results=4, provider="auto", recency_days=None, extra_d
             datetime.utcnow() - timedelta(days=recency_days)
         ).strftime("%Y-%m-%dT00:00:00.000Z")
 
+    exa_chars = content_chars if content_chars else 400
+    tavily_chars = content_chars if content_chars else 300
+
     if provider == "exa":
-        result = _search_exa(query, max_results, include_domains, start_published_date)
+        result = _search_exa(query, max_results, include_domains, start_published_date, max_characters=exa_chars)
         return (result, "Exa") if result else (None, None)
 
     if provider == "tavily":
         topic = "news" if recency_days else None
-        result = _search_tavily(query, max_results, topic=topic, days=recency_days, include_domains=include_domains)
+        result = _search_tavily(query, max_results, topic=topic, days=recency_days, include_domains=include_domains, content_chars=tavily_chars)
         return (result, "Tavily") if result else (None, None)
 
     if provider == "youtube":
@@ -202,11 +211,11 @@ def search_web(query, max_results=4, provider="auto", recency_days=None, extra_d
         if result:
             return result, "YouTube API"
 
-    result = _search_exa(query, max_results, include_domains, start_published_date)
+    result = _search_exa(query, max_results, include_domains, start_published_date, max_characters=exa_chars)
     if result:
         return result, "Exa"
     topic = "news" if recency_days else None
-    result = _search_tavily(query, max_results, topic=topic, days=recency_days, include_domains=include_domains)
+    result = _search_tavily(query, max_results, topic=topic, days=recency_days, include_domains=include_domains, content_chars=tavily_chars)
     if result:
         return result, "Tavily"
     return None, None
