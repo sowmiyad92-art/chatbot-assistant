@@ -115,15 +115,14 @@ def build_movies(config, scheduled_query_id):
 
     raw_titles = "\n\n".join(f"[{r['title']}]({r['url']})\n{r['content']}" for r in results)
 
-    prompt = f"""Today's date is {today_str}. Below are excerpts from movie release
+        prompt = f"""Today's date is {today_str}. Below are excerpts from movie release
 calendar pages covering this general period.
 
-From these excerpts, extract feature films releasing specifically ON or very close to
-{today_str} (skip trailers, re-releases unless clearly listed as a re-release event,
-and TV episodes). Group into "Theatrical" and "Streaming/OTT" sections. If a detail
-(genre, language, platform) isn't available, omit it rather than guessing. If the
-excerpts don't clearly indicate a release on or near {today_str}, say so plainly
-instead of guessing — do not pad the list with releases from other dates in the month.
+From these excerpts, extract feature films releasing this week (on or within a
+few days of {today_str}), skipping trailers and TV episodes. Group into
+"Theatrical" and "Streaming/OTT" sections. If a detail (genre, language,
+platform) isn't available, omit it rather than guessing. If the excerpts
+don't mention any films releasing this week at all, say so plainly.
 
 Source excerpts:
 {raw_titles}"""
@@ -137,7 +136,7 @@ Source excerpts:
 # ---------------------------------------------------------------------
 
 def build_youtube(config, scheduled_query_id):
-    from youtube import get_latest_upload, get_transcript
+    from youtube import get_latest_upload  # get_transcript import removed
 
     candidates = []
     for name, channel_id in YOUTUBE_CHANNELS.items():
@@ -149,13 +148,14 @@ def build_youtube(config, scheduled_query_id):
         return "No video found today."
 
     pick = max(candidates, key=lambda v: v["published_at"])
-    video_id = pick["url"].split("v=")[-1]
 
-    transcript_text = get_transcript(video_id)
-    source_text = transcript_text or pick.get("description", "")[:500]
+    # Transcript fetch removed — youtube-transcript-api is reliably IP-blocked
+    # on GitHub Actions runners (cloud provider IP). Description is the
+    # only reliable source in CI.
+    source_text = pick.get("description", "")[:500]
 
     if not source_text:
-        summary = "(no transcript or description available)"
+        summary = f"{pick['title']} ({pick['channel']})"
     else:
         summary_prompt = (
             f"Title: {pick['title']}\nContent: {source_text}\n\n"
