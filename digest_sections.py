@@ -114,6 +114,7 @@ def build_movies(config, scheduled_query_id):
         return "Nothing found today."
 
     raw_titles = "\n\n".join(f"[{r['title']}]({r['url']})\n{r['content']}" for r in results)
+    print(f"[digest_sections.py] movies raw_titles (first 800 chars):\n{raw_titles[:800]}")
 
     prompt = f"""Today's date is {today_str}. Below are excerpts from movie release
 calendar pages covering this general period.
