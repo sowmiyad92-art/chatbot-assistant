@@ -92,10 +92,10 @@ def build_movies(config, scheduled_query_id):
         # NOTE: query widened to "this week" + month, not the exact date —
         # calendar sites group by week/month, and pinning to one exact day
         # returns far fewer usable hits.
-        # NOTE: content_chars raised to 2000 — these are long list pages;
+        # NOTE: content_chars raised to 2500 — these are long list pages;
         # the default 300-400 char snippet cuts off before reaching
         # today's entries.
-            results, provider = search.search_web(
+        results, provider = search.search_web(
             f"new movie releases this week {month_str} theatrical streaming",
             max_results=6,
             provider="auto",
@@ -104,7 +104,6 @@ def build_movies(config, scheduled_query_id):
                 "imdb.com", "themoviedb.org",
             ],
             content_chars=2500,
-        )
         )
     except Exception as e:
         print(f"[digest_sections.py] search_web raised for movies query: {e}")
