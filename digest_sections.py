@@ -82,21 +82,28 @@ def build_world_trending_news(config, scheduled_query_id):
 # ---------------------------------------------------------------------
 
 def build_movies(config, scheduled_query_id):
-    today_str = date.today().strftime("%B %d, %Y")
+    today = date.today()
+    today_str = today.strftime("%B %d, %Y")
+    month_str = today.strftime("%B %Y")  # e.g. "September 2026"
 
     try:
-        # NOTE: no recency_days here — that forces Tavily's news-only
-        # index, and movie release listings live on IMDb/JustWatch/etc,
-        # not news sites. Scope by domain instead, via extra_domains.
+        # NOTE: no recency_days — that forces Tavily's news-only index, and
+        # movie release calendars aren't classified as news articles.
+        # NOTE: query widened to "this week" + month, not the exact date —
+        # calendar sites group by week/month, and pinning to one exact day
+        # returns far fewer usable hits.
+        # NOTE: content_chars raised to 2000 — these are long list pages;
+        # the default 300-400 char snippet cuts off before reaching
+        # today's entries.
         results, provider = search.search_web(
-            f"movies releasing {today_str} theatrical OTT streaming",
-            max_results=8,
+            f"movies releasing this week {month_str} theatrical streaming OTT release calendar",
+            max_results=6,
             provider="auto",
             extra_domains=[
-                "imdb.com", "themoviedb.org", "justwatch.com",
-                "rottentomatoes.com", "variety.com", "hollywoodreporter.com",
-                "boxofficemojo.com",
+                "movieinsider.com", "firstshowing.net", "boxofficemojo.com",
+                "imdb.com", "themoviedb.org",
             ],
+            content_chars=2000,
         )
     except Exception as e:
         print(f"[digest_sections.py] search_web raised for movies query: {e}")
@@ -106,15 +113,19 @@ def build_movies(config, scheduled_query_id):
         print(f"[digest_sections.py] search_web returned empty for movies query (provider={provider})")
         return "Nothing found today."
 
-    raw_titles = "\n".join(f"- {r['title']}" for r in results)
+    raw_titles = "\n\n".join(f"[{r['title']}]({r['url']})\n{r['content']}" for r in results)
 
-    prompt = f"""From these search results about movies releasing on {today_str}, 
-extract only actual feature film releases (skip trailers, re-releases, TV episodes).
-Group into "Theatrical" and "Streaming/OTT" sections. If a detail (genre, language, 
-platform) isn't available, omit it rather than guessing. If none of the results are
-actual film releases for this date, say so plainly instead of guessing.
+    prompt = f"""Today's date is {today_str}. Below are excerpts from movie release
+calendar pages covering this general period.
 
-Search results:
+From these excerpts, extract feature films releasing specifically ON or very close to
+{today_str} (skip trailers, re-releases unless clearly listed as a re-release event,
+and TV episodes). Group into "Theatrical" and "Streaming/OTT" sections. If a detail
+(genre, language, platform) isn't available, omit it rather than guessing. If the
+excerpts don't clearly indicate a release on or near {today_str}, say so plainly
+instead of guessing — do not pad the list with releases from other dates in the month.
+
+Source excerpts:
 {raw_titles}"""
 
     result = llm.get_response([{"role": "user", "content": prompt}])
