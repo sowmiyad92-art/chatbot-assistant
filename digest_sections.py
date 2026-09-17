@@ -119,7 +119,7 @@ def build_movies(config, scheduled_query_id):
         print(f"[digest_sections.py] Table found but no titles parsed for {calendar_url}")
         return "Nothing found today."
 
-    formatted = "\n".join(f"- {t}" for t in titles[:15])
+    formatted = "\n".join(f"- {t}" for t in titles[:8])
     return f"**Theatrical (week of {today_str}):**\n{formatted}"
 
 
