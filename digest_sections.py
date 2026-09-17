@@ -115,7 +115,7 @@ def build_movies(config, scheduled_query_id):
 
     raw_titles = "\n\n".join(f"[{r['title']}]({r['url']})\n{r['content']}" for r in results)
 
-        prompt = f"""Today's date is {today_str}. Below are excerpts from movie release
+    prompt = f"""Today's date is {today_str}. Below are excerpts from movie release
 calendar pages covering this general period.
 
 From these excerpts, extract feature films releasing this week (on or within a
