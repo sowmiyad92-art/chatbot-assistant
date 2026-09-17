@@ -77,11 +77,28 @@ def build_ai_tool_launches(config, scheduled_query_id):
     return _search_and_format("new AI tool or model launch today")
 
 def build_world_trending_news(config, scheduled_query_id):
-    return _search_and_format("world trending news today stock market climate")
+    topics = ["world trending news today", "stock market today", "climate news today"]
+    seen = set()
+    lines = []
+    for topic in topics:
+        try:
+            results, provider = search.search_web(topic, max_results=3, provider="auto", recency_days=1)
+        except Exception as e:
+            print(f"[digest_sections.py] search_web raised for {topic!r}: {e}")
+            continue
+        if not results:
+            continue
+        for r in results:
+            if r["title"] not in seen:
+                seen.add(r["title"])
+                lines.append(f"- {r['title']}")
+        if len(lines) >= 5:
+            break
+    return "\n".join(lines[:5]) if lines else "Nothing found today."
 
 
 # ---------------------------------------------------------------------
-# 4. Movies releasing today
+# 4. Movies releasing today & Netflix OTT
 # ---------------------------------------------------------------------
 
 def build_movies(config, scheduled_query_id):
@@ -121,6 +138,26 @@ def build_movies(config, scheduled_query_id):
 
     formatted = "\n".join(f"- {t}" for t in titles[:8])
     return f"**Theatrical (week of {today_str}):**\n{formatted}"
+
+def build_netflix_ott(config, scheduled_query_id):
+    url = "https://www.whats-on-netflix.com/new-titles-this-week/"
+    try:
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"[digest_sections.py] Netflix fetch failed: {e}")
+        return "Nothing found today."
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    headings = soup.find_all(["h2", "h3"], limit=20)
+    titles = [h.get_text(strip=True) for h in headings if h.get_text(strip=True)]
+    titles = [t for t in titles if len(t) < 80][:8]  # drop long boilerplate headings
+
+    if not titles:
+        print(f"[digest_sections.py] No titles parsed for {url}")
+        return "Nothing found today."
+
+    return "\n".join(f"- {t}" for t in titles)
 
 
 # ---------------------------------------------------------------------
