@@ -96,6 +96,7 @@ def _search_exa(query, max_results, include_domains=None, start_published_date=N
         if include_domains:
             kwargs["include_domains"] = include_domains
         if start_published_date:
+            print(f"[search.py] Exa query={query!r} include_domains={include_domains}")
             kwargs["start_published_date"] = start_published_date
         response = client.search_and_contents(query, **kwargs)
         structured = []
