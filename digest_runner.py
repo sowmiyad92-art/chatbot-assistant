@@ -1,10 +1,10 @@
-# digest_runner.py
-
 import os
 import requests
 
 import db
 import digest_sections as sections
+from digest import compute_deltas
+from db import get_last_digest_run
 
 SECTION_BUILDERS = {
     "job_questions": sections.build_job_questions,
@@ -26,18 +26,8 @@ SECTION_HEADERS = {
     "world_trending_news": "🌍 World Trending",
 }
 
-# Sections where we run a "skip if unchanged from yesterday" delta check.
-# The literal failure string below must never be treated as "unchanged" —
-# otherwise a broken search on day 1 poisons yesterday's payload and
-# silently suppresses the section (header included) on day 2 even once
-# the search is fixed and returning real content.
-DELTA_CHECKED_SECTIONS = ("ai_news", "ai_tool_launches", "world_trending_news", "youtube")
-FAILURE_STRING = "Nothing found today."
-
-
-# digest_runner.py
-
 TELEGRAM_MAX_LEN = 4096
+
 
 def send_telegram_message(chat_id, text):
     token = os.environ["TELEGRAM_BOT_TOKEN"]
@@ -84,7 +74,6 @@ def run_digest():
         config_id = config["id"]
         chat_id = config["telegram_chat_id"]
         enabled_sections = config.get("sections", {})
-        yesterday = db.get_yesterday_payload(config_id) or {}
 
         payload = {}
         failures = []
@@ -94,19 +83,15 @@ def run_digest():
                 continue
             try:
                 result = SECTION_BUILDERS[key](config, config_id)
-
-                # simple delta check: skip if identical to yesterday's content
-                if key in DELTA_CHECKED_SECTIONS:
-                    if result == FAILURE_STRING:
-                        pass  # always show a failed/empty search, never suppress as "duplicate"
-                    elif result == yesterday.get(key):
-                        result = None  # genuinely unchanged content — skip
-
                 payload[key] = result
             except Exception as e:
                 print(f"[digest_runner] section '{key}' failed: {e}")
                 failures.append(key)
                 payload[key] = None
+
+        # Compute deltas against the last digest run
+        last_payload = get_last_digest_run()
+        payload = compute_deltas(payload, last_payload)
 
         # format message
         lines = []
