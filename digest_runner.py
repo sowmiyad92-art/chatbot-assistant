@@ -90,7 +90,7 @@ def run_digest():
                 payload[key] = None
 
         # Compute deltas against the last digest run
-        last_payload = get_last_digest_run()
+        last_payload = db.get_last_digest_run()
         payload = compute_deltas(payload, last_payload)
 
         # format message
