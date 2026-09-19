@@ -37,7 +37,7 @@ st.markdown("""
     --text-dim: #6B7280;
     --accent-user: #D9704A;
     --accent-assistant: #6FA8AF;
-    --accent-verified: #34D399;   /* was #4CAF6D */
+    --accent-verified: #34D399;
     --accent-limited: #D97706;
     --border: #232A36;
 }
@@ -83,7 +83,6 @@ h1, h2, h3 {
 }
 div[data-testid="stCaptionContainer"] { color: var(--text-dim) !important; }
 
-/* Sidebar section labels: uppercase small-caps monospace, matching reference */
 section[data-testid="stSidebar"] h3 {
     font-family: 'JetBrains Mono', monospace !important;
     font-size: 12px !important;
@@ -93,7 +92,6 @@ section[data-testid="stSidebar"] h3 {
     font-weight: 500 !important;
 }
 
-/* "+ new_session" style button: bordered, monospace, green */
 section[data-testid="stSidebar"] .stButton:first-of-type button {
     font-family: 'JetBrains Mono', monospace !important;
     background-color: transparent !important;
@@ -130,9 +128,6 @@ section[data-testid="stSidebar"] .stButton:first-of-type button:hover {
 .session-name { color: var(--text-dim); }
 .session-row.active .session-name { color: var(--text); font-weight: 500; }
 
-/* Hover-reveal delete icon — each session row is wrapped in
-   st.container(key=f"session_row_{id}"), which Streamlit renders as a div
-   with class "st-key-session_row_<id>". Requires Streamlit >= 1.32. */
 div[class*="st-key-session_row_"] .stButton {
     opacity: 0;
     transition: opacity 0.12s ease-in-out;
@@ -149,7 +144,6 @@ div[class*="st-key-session_row_"]:hover .stButton {
 }
 div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
 
-/* Hide default avatar icon entirely — reference design has no icon, just a colored border */
 [data-testid="stChatMessageAvatarUser"], [data-testid="stChatMessageAvatarAssistant"],
 [data-testid*="Avatar"] {
     display: none !important;
@@ -177,7 +171,6 @@ div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
     font-size: 12px;
 }
 
-/* Model badge pill */
 .model-badge {
     display: inline-block;
     font-family: 'JetBrains Mono', monospace;
@@ -192,7 +185,6 @@ div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
     margin-bottom: 6px;
 }
 
-/* Copy button */
 .copy-btn {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
@@ -214,7 +206,6 @@ div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
     margin: 2px 0;
 }
 
-/* Status flags */
 .status-verified, .status-limited {
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
@@ -258,12 +249,6 @@ section[data-testid="stSidebar"] .stButton button:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# NOTE: st.chat_message(avatar=...) is unreliable across Streamlit versions —
-# it validates against emoji ranges and can crash on both geometric shapes (●/◆)
-# AND standard emoji depending on the Streamlit/Python build (confirmed crash on
-# python3.14 here). We don't use avatar= at all — role labels (user/assistant)
-# are rendered as styled markdown text above each message instead.
-
 _PROVIDER_MODE_MAP = {
     "Auto": "auto",
     "Exa only": "exa",
@@ -272,9 +257,6 @@ _PROVIDER_MODE_MAP = {
 }
 
 # ---------- Sidebar: sessions + settings ----------
-# Session switching uses a query param + <a href> link (not st.button) so the
-# active-session dot can be styled independently from the label text —
-# st.button only renders plain text, so the dot and text always shared one color.
 qp = st.query_params
 if "session_id" in qp:
     try:
@@ -292,9 +274,9 @@ if "current_session_id" not in st.session_state:
         st.session_state.current_session_id = db.create_session("New chat")
 
 if "show_subtitle" not in st.session_state:
-    st.session_state.show_subtitle = False   # hidden by default per your call
+    st.session_state.show_subtitle = False
 if "show_full_model_name" not in st.session_state:
-    st.session_state.show_full_model_name = False  # hidden by default, badge shows short form
+    st.session_state.show_full_model_name = False
 if "search_usage_count" not in st.session_state:
     st.session_state.search_usage_count = 0
 if "show_all_sessions" not in st.session_state:
@@ -402,6 +384,18 @@ with st.sidebar:
         except Exception as e:
             st.caption(f"usage stats unavailable ({e}) — has the search_log table been created?")
 
+    st.markdown("---")
+    st.markdown("### Frequent queries")
+    try:
+        top_queries = db.get_top_queries(limit=15)
+        for tq in top_queries:
+            label = tq["query"][:40] + ("..." if len(tq["query"]) > 40 else "")
+            if st.button(f"{label} ({tq['count']}x)", key=f"topq_{hash(tq['query'])}", use_container_width=True):
+                st.session_state.pending_query = tq["query"]
+                st.rerun()
+    except Exception as e:
+        st.caption(f"frequent queries unavailable ({e})")
+
 # ---------- Main chat area ----------
 st.markdown("## Aadsia")
 if st.session_state.show_subtitle:
@@ -497,7 +491,11 @@ for i, msg in enumerate(history):
                 </script>
             """, height=32)
 
-if prompt := st.chat_input("Type a message..."):
+prompt = st.chat_input("Type a message...")
+if not prompt and st.session_state.get("pending_query"):
+    prompt = st.session_state.pop("pending_query")
+
+if prompt:
     if not history:
         db.update_session_name_from_first_message(session_id, prompt)
 
@@ -522,17 +520,8 @@ if prompt := st.chat_input("Type a message..."):
         elif mode == "Off":
             should_search = False
         elif provider_choice != "auto":
-            # A specific provider was forced (Exa/Tavily/YouTube only) — that's
-            # itself a clear signal the user wants a search this turn, so skip
-            # the flaky needs_search() classifier entirely and just search.
             should_search = True
         elif youtube.is_youtube_intent(prompt):
-            # Deterministic keyword check (views/trending/subscribers/@handle)
-            # instead of the LLM classifier — observed the classifier give 3
-            # different yes/no answers for the identical query seconds apart,
-            # and a "no" here means the model free-associates exact view
-            # counts and titles from nothing, which is the worst place for
-            # that classifier's flakiness to bite.
             should_search = True
         elif any(kw in prompt.lower() for kw in ["today", "this week", "this month", "latest", "current", "right now", "breaking"]):
            should_search = True
