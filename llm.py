@@ -1,13 +1,16 @@
+import calendar
 import os
-from datetime import datetime, timezone, timedelta
-from groq import Groq
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
+from groq import Groq
 
 load_dotenv()
+
 
 def get_api_key():
     try:
         import streamlit as st
+
         if "GROQ_API_KEY" in st.secrets:
             return st.secrets["GROQ_API_KEY"]
     except Exception:
@@ -38,7 +41,9 @@ SYSTEM_PROMPT = (
 )
 
 
-CLASSIFIER_MODEL = "openai/gpt-oss-20b"  # cheapest/fastest — this call should cost almost nothing
+CLASSIFIER_MODEL = (
+    "openai/gpt-oss-20b"  # cheapest/fastest — this call should cost almost nothing
+)
 
 CLASSIFIER_PROMPT = (
     "You decide if a user question needs a live web search to answer well, or if "
@@ -92,9 +97,6 @@ def _build_search_context(search_results, max_chars=None):
     return "\n".join(lines)
 
 
-import calendar
-
-
 def _timeframe_range(query, today):
     q = query.lower()
     if "today" in q:
@@ -107,18 +109,26 @@ def _timeframe_range(query, today):
         return "next month", start, end
     if "this month" in q:
         start = today.replace(day=1)
-        end = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+        end = today.replace(
+            day=calendar.monthrange(today.year, today.month)[1]
+        )
         return "this month", start, end
     if "this week" in q:
         start = today - timedelta(days=today.weekday())
         end = start + timedelta(days=6)
         return "this week", start, end
     if "this year" in q:
-        return "this year", today.replace(month=1, day=1), today.replace(month=12, day=31)
+        return (
+            "this year",
+            today.replace(month=1, day=1),
+            today.replace(month=12, day=31),
+        )
     return None
 
 
-def _build_system_content(search_results, max_chars=None, search_attempted=False, latest_query=None):
+def _build_system_content(
+    search_results, max_chars=None, search_attempted=False, latest_query=None
+):
     system_content = SYSTEM_PROMPT
     if search_results:
         today = datetime.now(timezone.utc).date()
@@ -155,7 +165,15 @@ def _build_system_content(search_results, max_chars=None, search_attempted=False
             "(e.g. 'Here's a video: [title] by [channel/author]') as if you are "
             "handing them the resource, not suggesting they go look it up. "
             "CRITICAL: only reference titles, names, view counts, and facts that "
-            "literally appear in the search results below — never invent, "
+            "literally appear in the search results below — "
+            "Search results may contain non-English text (Chinese, Korean, "
+            "etc.) — this is normal and expected. Read and extract facts "
+            "from them the same as English text: dates, titles, and "
+            "announcements in Chinese or Korean are just as valid a source "
+            "as English ones. Do not skip or discount a result just because "
+            "it's not in English — translate the relevant fact into your "
+            "answer. "
+            "never invent, "
             "paraphrase-into-a-new-title, or guess a plausible-sounding "
             "alternative that isn't actually there. If the search results don't "
             "contain something the user asked for, say so honestly instead of "
@@ -191,7 +209,8 @@ def _build_system_content(search_results, max_chars=None, search_attempted=False
             "verifiable items, list only the ones truly supported and say "
             "plainly that fewer were found than requested. NEVER invent an "
             "additional item — a title, cast member, date, or anything else — "
-            "just to pad the list up to the requested count:\n\n" + _build_search_context(search_results, max_chars)
+            "just to pad the list up to the requested count:\n\n"
+            + _build_search_context(search_results, max_chars)
         )
     elif search_attempted:
         system_content += (
@@ -221,7 +240,12 @@ def _build_system_content(search_results, max_chars=None, search_attempted=False
     return system_content
 
 
-def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_attempted=False):
+def get_response(
+    messages,
+    model=DEFAULT_MODEL,
+    search_results=None,
+    search_attempted=False,
+):
     """
     messages: list of {"role": "user"/"assistant", "content": "..."}
     search_results: optional list of {"title","url","content"} from search.search_web
@@ -247,7 +271,9 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
             break
 
     system_content = _build_system_content(
-        search_results, search_attempted=search_attempted, latest_query=latest_query
+        search_results,
+        search_attempted=search_attempted,
+        latest_query=latest_query,
     )
     chat_messages = [{"role": "system", "content": system_content}] + messages
 
@@ -271,14 +297,22 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
                 "model": model,
             }
         too_large = search_results and (
-            "413" in err or "rate_limit_exceeded" in err
-            or "tokens per minute" in err.lower() or "request too large" in err.lower()
+            "413" in err
+            or "rate_limit_exceeded" in err
+            or "tokens per minute" in err.lower()
+            or "request too large" in err.lower()
         )
         if not too_large:
             raise
-        print(f"[llm.py] request too large, retrying with trimmed context: {err[:200]}")
-        trimmed_system = _build_system_content(search_results, max_chars=150, latest_query=latest_query)
-        chat_messages = [{"role": "system", "content": trimmed_system}] + messages
+        print(
+            f"[llm.py] request too large, retrying with trimmed context: {err[:200]}"
+        )
+        trimmed_system = _build_system_content(
+            search_results, max_chars=150, latest_query=latest_query
+        )
+        chat_messages = [
+            {"role": "system", "content": trimmed_system}
+        ] + messages
         try:
             completion = client.chat.completions.create(
                 model=model,
@@ -288,7 +322,9 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
                 frequency_penalty=0.4,
             )
         except Exception as retry_err:
-            print(f"[llm.py] trimmed retry also failed: {str(retry_err)[:200]}")
+            print(
+                f"[llm.py] trimmed retry also failed: {str(retry_err)[:200]}"
+            )
             return {
                 "text": "I hit an API limit and couldn't recover even after trimming context — please try again with a narrower question.",
                 "sources": search_results,
