@@ -50,6 +50,34 @@ html, body, [class*="css"] {
 
 .stApp { background-color: var(--bg); }
 
+/* Table styling for Markdown tables */
+table, [data-testid="stMarkdownContainer"] table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    color: var(--text) !important;
+    background-color: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+th, [data-testid="stMarkdownContainer"] th {
+    background-color: var(--bg-input);
+    color: var(--text) !important;
+    font-weight: 600;
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+}
+td, [data-testid="stMarkdownContainer"] td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text) !important;
+}
+tr:last-child td, [data-testid="stMarkdownContainer"] tr:last-child td {
+    border-bottom: none;
+}
+
 header, [data-testid*="Header"] {
     background-color: var(--bg) !important;
     border-bottom: 1px solid var(--border);
