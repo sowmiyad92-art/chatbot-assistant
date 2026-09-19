@@ -232,3 +232,26 @@ def get_yesterday_payload(scheduled_query_id):
         .execute()
     )
     return res.data[0]["payload"] if res.data else None
+    
+    def get_top_queries(limit=15):
+    """
+    Returns the most frequently asked user queries across all sessions,
+    for the sidebar quick-query panel. Fetched and aggregated in Python —
+    fine at personal-app volume. If messages grows large, swap for a
+    Postgres view/RPC instead (same tradeoff noted in get_search_usage_stats).
+    """
+    rows = (
+        supabase.table("messages")
+        .select("content")
+        .eq("role", "user")
+        .execute()
+        .data
+    )
+    counts = {}
+    for row in rows:
+        text = row["content"].strip()
+        if text:
+            counts[text] = counts.get(text, 0) + 1
+
+    top = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:limit]
+    return [{"query": q, "count": c} for q, c in top]
