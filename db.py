@@ -233,7 +233,7 @@ def get_yesterday_payload(scheduled_query_id):
     )
     return res.data[0]["payload"] if res.data else None
     
-    def get_top_queries(limit=15):
+def get_top_queries(limit=15):
     """
     Returns the most frequently asked user queries across all sessions,
     for the sidebar quick-query panel. Fetched and aggregated in Python —
