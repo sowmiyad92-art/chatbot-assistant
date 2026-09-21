@@ -283,7 +283,7 @@ def _match_facts(text, search_results, latest_query=None):
         return None
     today = datetime.now(timezone.utc).date()
     text = _norm(text).replace(today.isoformat(), "")
-    
+
     tf = _timeframe_range(latest_query, today) if latest_query else None
     if tf:
         for d in (tf[1], tf[2]):
@@ -308,9 +308,11 @@ def _match_facts(text, search_results, latest_query=None):
             facts.add(" ".join(words).lower())
     if not facts:
         return None
-    src = _norm(
-        " ".join(f"{r['title']} {r['content']}" for r in search_results)
-    ).lower().replace(",", "")
+    src = (
+        _norm(" ".join(f"{r['title']} {r['content']}" for r in search_results))
+        .lower()
+        .replace(",", "")
+    )
     matched = sum(1 for f in facts if f in src)
     return {"matched": matched, "total": len(facts)}
 
@@ -321,25 +323,6 @@ def get_response(
     search_results=None,
     search_attempted=False,
 ):
-    """
-    messages: list of {"role": "user"/"assistant", "content": "..."}
-    search_results: optional list of {"title","url","content"} from search.search_web
-    search_attempted: pass True whenever search_web() was actually called this
-        turn, regardless of whether it returned results.
-
-    Returns a dict:
-        {
-            "text": str,
-            "sources": list | None,
-            "status": "VERIFIED" | "LIMITED" | "NONE",
-            "model": str,
-            "match": dict | None,
-        }
-    Status starts as a source-count heuristic, then gets downgraded if the
-    model's own answer signals it couldn't actually use the sources it was
-    given (e.g. irrelevant/wrong-language results) — see
-    `model_found_nothing_useful` below.
-    """
     latest_query = None
     for m in reversed(messages):
         if m.get("role") == "user":
@@ -368,8 +351,10 @@ def get_response(
         err = str(e)
         if "Tool choice is none, but model called a tool" in err:
             return {
-                "text": "# replace the "text" value in the "Tool choice is none" branch with
-                "text": "I don't have access to any customer data, so I can't answer that. I can help with general knowledge and web questions.",
+                "text": (
+                    "I don't have access to any customer data, so I can't "
+                    "answer that. I can help with general knowledge and web questions."
+                ),
                 "sources": None,
                 "status": "NONE",
                 "model": model,
@@ -433,7 +418,8 @@ def get_response(
         "not present in the data",
     ]
     model_found_nothing_useful = search_results and any(
-        phrase in text.lower().replace("\u2019", "'") for phrase in _NO_USEFUL_DATA_PHRASES
+        phrase in text.lower().replace("\u2019", "'")
+        for phrase in _NO_USEFUL_DATA_PHRASES
     )
 
     match = _match_facts(text, search_results, latest_query)
