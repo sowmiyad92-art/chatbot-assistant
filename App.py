@@ -532,7 +532,11 @@ if prompt:
         st.write(prompt)
 
     full_history = db.get_session_messages(session_id)
-    api_messages = [{"role": m["role"], "content": m["content"]} for m in full_history]
+    api_messages = [
+        {"role": m["role"], "content": m["content"]}
+        for m in full_history[-10:]
+        if not (db.get_message_meta(m) or {}).get("error")
+    ]
 
     with st.chat_message("assistant"):
         search_results = None
@@ -576,11 +580,11 @@ if prompt:
                 reply = result["text"]
             except Exception as e:
                 reply = f"⚠️ Error calling Groq API: {e}"
-                result = {"text": reply, "sources": None, "status": "NONE", "model": st.session_state.selected_model}
+                result = {"text": reply, "sources": None, "status": "NONE", "model": st.session_state.selected_model, "error": True}
         st.write(reply)
 
     db.save_message(
         session_id, "assistant", reply,
-        meta={"status": result["status"], "sources": result["sources"], "model": result["model"], "provider": search_provider},
+        meta={"status": result["status"], "sources": result["sources"], "model": result["model"], "provider": search_provider, "error": result.get("error", False)},
     )
     st.rerun()
