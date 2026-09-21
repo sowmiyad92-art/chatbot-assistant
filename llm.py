@@ -167,6 +167,8 @@ def _build_system_content(
             "below your answer, so present each result directly and naturally "
             "(e.g. 'Here's a video: [title] by [channel/author]') as if you are "
             "handing them the resource, not suggesting they go look it up. "
+            "Only report results for the exact team, person, or title the user named; "
+            "if a source is about a different team or event, do not use it. "
             "CRITICAL: only reference titles, names, view counts, and facts that "
             "literally appear in the search results below — "
             "Search results may contain non-English text (Chinese, Korean, "
@@ -437,7 +439,14 @@ def get_response(
                 f"[llm.py] trimmed retry also failed: {str(retry_err)[:200]}"
             )
             return {
-                "text": "I hit an API limit and couldn't recover even after trimming context — please try again with a narrower question.",
+                "text": (
+                    "Groq daily token limit reached. Try again later or switch model."
+                    if (
+                        "per day" in str(retry_err).lower()
+                        or "tpd" in str(retry_err).lower()
+                    )
+                    else "Groq per-minute limit hit. Wait a minute and retry."
+                ),
                 "sources": search_results,
                 "status": "LIMITED",
                 "error": True,
