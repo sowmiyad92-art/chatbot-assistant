@@ -1,3 +1,8 @@
+from dotenv import load_dotenv
+load_dotenv()
+from dotenv import load_dotenv
+load_dotenv()
+
 import streamlit as st
 import streamlit.components.v1 as components
 from datetime import datetime, timezone
@@ -5,6 +10,7 @@ import db
 import llm
 import search
 import youtube
+import kb_search
 
 
 def _html_escape(text):
@@ -269,6 +275,7 @@ _PROVIDER_MODE_MAP = {
     "Exa only": "exa",
     "Tavily only": "tavily",
     "YouTube only": "youtube",
+    "Code KB": "code_kb",
 }
 
 # ---------- Sidebar: sessions + settings ----------
@@ -364,12 +371,13 @@ with st.sidebar:
 
     search_provider_mode = st.selectbox(
         "Search provider",
-        options=["Auto", "Exa only", "Tavily only", "YouTube only"],
+        options=["Auto", "Exa only", "Tavily only", "YouTube only", "Code KB"],
         index=0,
         help="Auto: routes YouTube-shaped queries (views, trending, @handles) to the "
              "YouTube API, everything else Exa first with Tavily as automatic fallback. "
              "Forcing one provider disables all fallback/routing AND always searches "
-             "(bypasses the Auto web-search classifier above).",
+             "(bypasses the Auto web-search classifier above). Code KB searches your "
+             "11-repo code knowledge base instead of the web.",
     )
     st.session_state.search_provider_mode = search_provider_mode
 
@@ -535,31 +543,53 @@ if prompt := st.chat_input("Type a message..."):
             # that classifier's flakiness to bite.
             should_search = True
         elif any(kw in prompt.lower() for kw in ["today", "this week", "this month", "latest", "current", "right now", "breaking"]):
-           should_search = True
+            should_search = True
         else:
             with st.spinner("Checking if this needs live data..."):
                 should_search = llm.needs_search(prompt)
 
         search_attempted = False
-        if should_search:
-            with st.spinner("Searching the web..."):
-                search_attempted = True
-                search_results, search_provider = search.search_web(prompt, provider=provider_choice)
-                st.session_state.search_usage_count += 1
-                if search_provider:
-                    db.log_search_usage(search_provider)
-        with st.spinner("Thinking..."):
-            try:
-                result = llm.get_response(
-                    api_messages,
-                    model=st.session_state.selected_model,
-                    search_results=search_results,
-                    search_attempted=search_attempted,
-                )
-                reply = result["text"]
-            except Exception as e:
-                reply = f"⚠️ Error calling Groq API: {e}"
-                result = {"text": reply, "sources": None, "status": "NONE", "model": st.session_state.selected_model}
+        if provider_choice == "code_kb":
+            with st.spinner("Searching code knowledge base..."):
+                try:
+                    kb_result = kb_search.ask_kb(prompt)
+                    reply = kb_result["answer"]
+                    kb_sources = [
+                        {"title": f"{c['repo']}/{c['file']}", "url": ""}
+                        for c in kb_result["chunks"]
+                    ]
+                    result = {
+                        "text": reply,
+                        "sources": kb_sources if kb_sources else None,
+                        "status": "VERIFIED" if kb_sources else "LIMITED",
+                        "model": "openai/gpt-oss-20b",
+                    }
+                    search_provider = "Code KB"
+                    st.session_state.search_usage_count += 1
+                except Exception as e:
+                    reply = f"⚠️ Error calling Code KB: {e}"
+                    result = {"text": reply, "sources": None, "status": "NONE", "model": st.session_state.selected_model}
+                    search_provider = None
+        else:
+            if should_search:
+                with st.spinner("Searching the web..."):
+                    search_attempted = True
+                    search_results, search_provider = search.search_web(prompt, provider=provider_choice)
+                    st.session_state.search_usage_count += 1
+                    if search_provider:
+                        db.log_search_usage(search_provider)
+            with st.spinner("Thinking..."):
+                try:
+                    result = llm.get_response(
+                        api_messages,
+                        model=st.session_state.selected_model,
+                        search_results=search_results,
+                        search_attempted=search_attempted,
+                    )
+                    reply = result["text"]
+                except Exception as e:
+                    reply = f"⚠️ Error calling Groq API: {e}"
+                    result = {"text": reply, "sources": None, "status": "NONE", "model": st.session_state.selected_model}
         st.write(reply)
 
     db.save_message(
