@@ -465,10 +465,15 @@ for i, msg in enumerate(history):
                 status = extra.get("status")
                 sources = extra.get("sources")
                 provider_tag = f" · via {extra.get('provider')}" if extra.get("provider") else ""
+                
+                m = extra.get("match")
+                mt = f" · {m['matched']} of {m['total']} facts matched" if m else ""
+                
                 if status == "VERIFIED" and sources:
-                    st.markdown(f'<div class="status-verified">VERIFIED · {len(sources)} sources{provider_tag}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="status-verified">VERIFIED · {len(sources)} sources{mt}{provider_tag}</div>', unsafe_allow_html=True)
                 elif status == "LIMITED" and sources:
-                    st.markdown(f'<div class="status-limited">LIMITED · {len(sources)} source, low confidence{provider_tag}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="status-limited">LIMITED · {len(sources)} sources{mt}{provider_tag}</div>', unsafe_allow_html=True)
+                
                 if sources:
                     with st.expander(f"see sources · {len(sources)}"):
                         lines = "".join(
@@ -595,6 +600,13 @@ if prompt:
 
     db.save_message(
         session_id, "assistant", reply,
-        meta={"status": result["status"], "sources": result["sources"], "model": result["model"], "provider": search_provider, "error": result.get("error", False)},
+        meta={
+            "status": result["status"], 
+            "sources": result["sources"], 
+            "model": result["model"], 
+            "provider": search_provider, 
+            "error": result.get("error", False),
+            "match": result.get("match")
+        },
     )
     st.rerun()
