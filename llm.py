@@ -314,7 +314,7 @@ def _match_facts(text, search_results, latest_query=None):
         .lower()
         .replace(",", "")
     )
-    matched = sum(1 for f in facts if f in src)
+    matched = sum(1 for f in facts if re.search(r"(?<![a-z0-9])" + re.escape(f) + r"(?![a-z0-9])", src))
     return {"matched": matched, "total": len(facts)}
 
 
