@@ -308,9 +308,7 @@ section[data-testid="stSidebar"] .stButton button:hover {
 
 .cat-wrap { text-align: center; padding: 4px 0 8px; }.cat-wrap .lab { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim); margin-top: 2px; }.cat .earL, .cat .earR, .cat .eyes { transform-box: fill-box; }.cat .earL, .cat .earR { transform-origin: 50% 100%; transition: transform .3s ease-out; }.cat .eyes { transform-origin: center; }.cat.idle .eyes { animation: catbl 3s infinite; }.cat.search .eyes { animation: catsc .9s ease-in-out infinite alternate; }.cat.search .earL { animation: catpl .7s ease-in-out infinite alternate; }.cat.search .earR { animation: catpr .7s ease-in-out infinite alternate .35s; }.cat.check .wk { animation: catwh .6s ease-in-out infinite alternate; }.cat.check .wk:nth-child(2) { animation-delay: .1s; }.cat.check .wk:nth-child(3) { animation-delay: .2s; }.cat.check .wk:nth-child(4) { animation-delay: .3s; }.cat.check .wk:nth-child(5) { animation-delay: .4s; }.cat.check .wk:nth-child(6) { animation-delay: .5s; }.cat.done .earL { transform: rotate(-6deg); } .cat.done .earR { transform: rotate(6deg); }.cat.limited .earL { transform: rotate(-30deg); } .cat.limited .earR { transform: rotate(30deg); }@keyframes catbl { 0%,92%,100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }@keyframes catsc { from { transform: translateX(-5px); } to { transform: translateX(5px); } }@keyframes catpl { from { transform: rotate(-10deg); } to { transform: rotate(4deg); } }@keyframes catpr { from { transform: rotate(10deg); } to { transform: rotate(-4deg); } }@keyframes catwh { from { stroke: #f5a623; } to { stroke: #4ec9a0; } }
 
-.st-key-cat_bar { position: sticky; top: 3.75rem; z-index: 50; background: var(--bg); padding: 4px 0 10px; }
-.st-key-cat_bar .cat-wrap { padding: 2px 0; }
-.st-key-cat_bar svg.cat { width: 56px; height: 56px; }
+.cat-wrap svg.cat { width: 110px; height: 110px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -588,6 +586,8 @@ if prompt:
     ]
 
     with st.chat_message("assistant"):
+        live = st.empty()
+        live.markdown(cat_html("idle", "thinking…"), unsafe_allow_html=True)
         search_results = None
         search_provider = None
         mode = st.session_state.get("web_search_mode", "Auto")
@@ -612,14 +612,14 @@ if prompt:
 
         search_attempted = False
         if should_search:
-            cat_slot.markdown(cat_html("search", "searching…"), unsafe_allow_html=True)
+            live.markdown(cat_html("search", "searching…"), unsafe_allow_html=True)
             with st.spinner("Searching the web..."):
                 search_attempted = True
                 search_results, search_provider = search.search_web(prompt, provider=provider_choice)
                 st.session_state.search_usage_count += 1
                 if search_provider:
                     db.log_search_usage(search_provider)
-        cat_slot.markdown(cat_html("check", "checking sources…") if search_attempted else cat_html("idle", "thinking…"), unsafe_allow_html=True)
+        live.markdown(cat_html("check", "checking sources…") if search_attempted else cat_html("idle", "thinking…"), unsafe_allow_html=True)
         with st.spinner("Thinking..."):
             try:
                 result = llm.get_response(
@@ -641,6 +641,7 @@ if prompt:
             st.session_state.cat_state = ("limited", "limited confidence")
         else:
             st.session_state.cat_state = ("idle", "")
+        live.empty()
         st.write(reply)
 
     db.save_message(
