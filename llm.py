@@ -196,10 +196,9 @@ def _build_system_content(
             "exact number directly — never say it's 'high', 'unable to "
             "determine', or 'not mentioned' when the number is actually "
             "present in the result. "
-            "present the result directly and confidently — do not add hedges "
-            "like 'I don't have information about their most-watched videos "
-            "in general' or similar disclaimers when the results already "
-            "answer the question. If a result's content includes text like "
+            "present the result directly and confidently, but state once, briefly, "
+            "that the ranking is among the videos retrieved, not the channel's "
+            "full catalog. If a result's content includes text like "
             "'Rank N of M by view count', that ranking was already computed "
             "and verified before reaching you — present it as-is, with "
             "confidence, and do not undercut it with unnecessary caveats. "
@@ -317,6 +316,55 @@ def _match_facts(text, search_results, latest_query=None):
     return {"matched": matched, "total": len(facts)}
 
 
+_QSTOP = {
+    "search",
+    "youtube",
+    "video",
+    "videos",
+    "show",
+    "find",
+    "give",
+    "tell",
+    "about",
+    "what",
+    "which",
+    "best",
+    "top",
+    "most",
+    "that",
+    "this",
+    "with",
+    "from",
+    "your",
+    "their",
+    "how",
+    "make",
+    "latest",
+    "today",
+    "week",
+    "month",
+    "viewed",
+    "watched",
+    "views",
+}
+
+
+def _relevant(query, search_results):
+    if not query or not search_results:
+        return True
+    words = {
+        w
+        for w in re.findall(r"[a-z]{4,}", _norm(query).lower())
+        if w not in _QSTOP
+    }
+    if not words:
+        return True
+    src = _norm(
+        " ".join(f"{r['title']} {r['content']}" for r in search_results)
+    ).lower()
+    return sum(1 for w in words if w in src) / len(words) >= 0.5
+
+
 def get_response(
     messages,
     model=DEFAULT_MODEL,
@@ -426,8 +474,10 @@ def get_response(
     ratio_ok = (
         match is not None
         and match["total"] >= 2
-        and match["matched"] / match["total"] >= 0.6
+        and match["matched"] / match["total"] >= 0.75
     )
+    ratio_ok = ratio_ok and _relevant(latest_query, search_results)
+
     if not search_results:
         status = "NONE"
     elif model_found_nothing_useful:
