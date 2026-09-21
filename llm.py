@@ -368,7 +368,8 @@ def get_response(
         err = str(e)
         if "Tool choice is none, but model called a tool" in err:
             return {
-                "text": "I can't call tools directly this way — try rephrasing your question naturally, e.g. 'Find the top lofi music videos on YouTube' instead of 'use your API tool to...'.",
+                "text": "# replace the "text" value in the "Tool choice is none" branch with
+                "text": "I don't have access to any customer data, so I can't answer that. I can help with general knowledge and web questions.",
                 "sources": None,
                 "status": "NONE",
                 "model": model,
