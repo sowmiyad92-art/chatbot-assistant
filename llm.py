@@ -1,6 +1,7 @@
 import calendar
 import os
 import re
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from groq import Groq
@@ -268,6 +269,12 @@ _STOP = {
 }
 
 
+def _norm(s):
+    for ch in "\u2010\u2011\u2012\u2013\u2014":
+        s = s.replace(ch, "-")
+    return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+
+
 def _match_facts(text, search_results):
     """Check numbers and names in the answer against the source text.
     Returns {"matched": n, "total": m} or None if there is nothing to check.
@@ -275,7 +282,7 @@ def _match_facts(text, search_results):
     if not search_results:
         return None
     today = datetime.now(timezone.utc).date().isoformat()
-    text = text.replace(today, "")
+    text = _norm(text).replace(today, "")
     facts = set()
     for m in re.findall(r"\d{4}-\d{2}-\d{2}", text):
         facts.add(m)
@@ -291,11 +298,9 @@ def _match_facts(text, search_results):
             facts.add(" ".join(words).lower())
     if not facts:
         return None
-    src = (
+    src = _norm(
         " ".join(f"{r['title']} {r['content']}" for r in search_results)
-        .lower()
-        .replace(",", "")
-    )
+    ).lower().replace(",", "")
     matched = sum(1 for f in facts if f in src)
     return {"matched": matched, "total": len(facts)}
 
@@ -411,11 +416,15 @@ def get_response(
         "no fresh search results",
     ]
     model_found_nothing_useful = search_results and any(
-        phrase in text.lower() for phrase in _NO_USEFUL_DATA_PHRASES
+        phrase in text.lower().replace("\u2019", "'") for phrase in _NO_USEFUL_DATA_PHRASES
     )
 
     match = _match_facts(text, search_results)
-    ratio_ok = match is None or match["matched"] / match["total"] >= 0.6
+    ratio_ok = (
+        match is not None
+        and match["total"] >= 2
+        and match["matched"] / match["total"] >= 0.6
+    )
     if not search_results:
         status = "NONE"
     elif model_found_nothing_useful:
