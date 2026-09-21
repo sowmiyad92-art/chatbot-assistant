@@ -19,6 +19,9 @@ def _html_escape(text):
         .replace('"', "&quot;")
     )
 
+
+CAT_SVG = """<div style="text-align:center;padding:4px 0 8px"><svg width="72" height="72" viewBox="0 0 120 120" role="img" aria-label="Aadsia mascot"><polygon points="20,48 26,8 58,30" fill="#a86d10"/><polygon points="20,44 26,4 58,26" fill="#f5a623"/><polygon points="100,48 94,8 62,30" fill="#a86d10"/><polygon points="100,44 94,4 62,26" fill="#f5a623"/><rect x="14" y="34" width="92" height="72" rx="32" fill="#a86d10"/><rect x="14" y="30" width="92" height="72" rx="32" fill="#f5a623"/><rect x="25" y="42" width="70" height="46" rx="20" fill="#0c0c0e"/><ellipse cx="45" cy="60" rx="7" ry="9" fill="#4ec9a0"/><ellipse cx="75" cy="60" rx="7" ry="9" fill="#4ec9a0"/><polygon points="56,71 64,71 60,75" fill="#4ec9a0"/><path d="M52 78 Q56 82 60 77 Q64 82 68 78" stroke="#4ec9a0" stroke-width="2.5" fill="none" stroke-linecap="round"/><g stroke="#f5a623" stroke-width="2.5" stroke-linecap="round"><line x1="14" y1="64" x2="2" y2="60"/><line x1="14" y1="72" x2="1" y2="72"/><line x1="14" y1="80" x2="2" y2="85"/><line x1="106" y1="64" x2="118" y2="60"/><line x1="106" y1="72" x2="119" y2="72"/><line x1="106" y1="80" x2="118" y2="85"/></g></svg></div>"""
+
 st.set_page_config(page_title="Aadsia", page_icon="◆", layout="wide")
 
 db.init_db()
@@ -26,26 +29,29 @@ db.init_db()
 # ---------- Custom CSS: design system ----------
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 :root {
-    --bg: #0B0E14;
-    --bg-sidebar: #10141C;
-    --bg-input: #161B24;
-    --bg-panel: #131720;
-    --text: #E8E6E0;
-    --text-dim: #6B7280;
-    --accent-user: #D9704A;
-    --accent-assistant: #6FA8AF;
-    --accent-verified: #34D399;
-    --accent-limited: #D97706;
-    --border: #232A36;
+    --bg: #0c0c0e;
+    --bg-sidebar: #141417;
+    --bg-input: #1c1c21;
+    --bg-panel: #1c1c21;
+    --text: #e4e4e8;
+    --text-dim: #a0a0aa;
+    --accent-user: #f5a623;
+    --accent-assistant: #c9c9d0;
+    --accent-verified: #4ec9a0;
+    --accent-limited: #f5a623;
+    --border: #303038;
 }
 
 html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
+    font-family: 'JetBrains Mono', monospace !important;
     color: var(--text) !important;
 }
+
+button, textarea, input, select, [data-baseweb] { font-family: 'JetBrains Mono', monospace !important; }
+
 * { scrollbar-color: var(--border) var(--bg); }
 
 .stApp { background-color: var(--bg); }
@@ -92,7 +98,8 @@ textarea, [data-testid*="ChatInput"] textarea, [class*="stChatInput"] textarea {
     background-color: var(--bg-input) !important;
     color: var(--text) !important;
     border: 1px solid var(--border) !important;
-    border-radius: 8px !important;
+    border-bottom: 4px solid var(--border) !important;
+    border-radius: 16px !important;
 }
 textarea::placeholder { color: var(--text-dim) !important; }
 div:has(> div > textarea) { background-color: var(--bg) !important; }
@@ -106,7 +113,7 @@ h1, h2, h3, p, span, label, li, ol, ul, .stCaption, div[data-testid="stCaptionCo
     color: var(--text) !important;
 }
 h1, h2, h3 {
-    font-family: 'Space Grotesk', sans-serif !important;
+    font-family: 'JetBrains Mono', monospace !important;
     letter-spacing: -0.02em;
 }
 div[data-testid="stCaptionContainer"] { color: var(--text-dim) !important; }
@@ -122,15 +129,16 @@ section[data-testid="stSidebar"] h3 {
 
 section[data-testid="stSidebar"] .stButton:first-of-type button {
     font-family: 'JetBrains Mono', monospace !important;
-    background-color: transparent !important;
-    color: var(--accent-verified) !important;
-    border: 1px solid var(--accent-verified) !important;
-    border-radius: 4px !important;
+    background-color: #f5a623 !important;
+    color: #1a1204 !important;
+    border: none !important;
+    border-bottom: 3px solid #a86d10 !important;
+    border-radius: 12px !important;
     font-weight: 500 !important;
     text-align: center !important;
 }
 section[data-testid="stSidebar"] .stButton:first-of-type button:hover {
-    background-color: rgba(76, 175, 109, 0.1) !important;
+    background-color: #ffb83d !important;
 }
 
 .session-row {
@@ -165,10 +173,11 @@ div[class*="st-key-session_row_"]:hover .stButton {
 }
 
 .stChatMessage {
-    background: transparent !important;
-    border-radius: 0 !important;
-    padding-left: 14px !important;
-    margin-bottom: 4px;
+    background: var(--bg-input) !important;
+    border-bottom: 4px solid var(--border);
+    border-radius: 16px !important;
+    padding: 12px 14px !important;
+    margin-bottom: 10px;
 }
 div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
 
@@ -177,10 +186,7 @@ div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
     display: none !important;
 }
 .stChatMessage:has(div[data-testid="stChatMessageAvatarUser"]) {
-    border-left: 2px solid var(--accent-user);
-}
-.stChatMessage:has(div[data-testid="stChatMessageAvatarAssistant"]) {
-    border-left: 2px solid var(--accent-assistant);
+    border-bottom-color: #a86d10;
 }
 
 .role-label {
@@ -425,6 +431,7 @@ with st.sidebar:
         st.caption(f"frequent queries unavailable ({e})")
 
 # ---------- Main chat area ----------
+st.markdown(CAT_SVG, unsafe_allow_html=True)
 st.markdown("## Aadsia")
 if st.session_state.show_subtitle:
     st.caption("groq · supabase · tavily — verified web-grounded answers")
@@ -556,7 +563,7 @@ if prompt:
         elif youtube.is_youtube_intent(prompt):
             should_search = True
         elif any(kw in prompt.lower() for kw in ["today", "this week", "this month", "latest", "current", "right now", "breaking"]):
-           should_search = True
+            should_search = True
         else:
             with st.spinner("Checking if this needs live data..."):
                 should_search = llm.needs_search(prompt)
