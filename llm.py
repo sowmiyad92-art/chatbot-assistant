@@ -77,7 +77,8 @@ def needs_search(query):
                 {"role": "user", "content": query},
             ],
             temperature=0,
-            max_tokens=3,
+            max_tokens=50,
+            reasoning_effort="low",
         )
         answer = completion.choices[0].message.content.strip().upper()
         return answer.startswith("YES")
@@ -295,7 +296,8 @@ def get_response(
             model=model,
             messages=chat_messages,
             temperature=temperature,
-            max_tokens=900,
+            max_tokens=2000,
+            reasoning_effort="low",
             frequency_penalty=0.4,
         )
     except Exception as e:
@@ -307,7 +309,7 @@ def get_response(
                 "status": "NONE",
                 "model": model,
             }
-        too_large = search_results and (
+        too_large = (
             "413" in err
             or "rate_limit_exceeded" in err
             or "tokens per minute" in err.lower()
@@ -323,7 +325,7 @@ def get_response(
         )
         chat_messages = [
             {"role": "system", "content": trimmed_system}
-        ] + messages
+        ] + messages[-4:]
         try:
             completion = client.chat.completions.create(
                 model=model,
@@ -340,6 +342,7 @@ def get_response(
                 "text": "I hit an API limit and couldn't recover even after trimming context — please try again with a narrower question.",
                 "sources": search_results,
                 "status": "LIMITED",
+                "error": True,
                 "model": model,
             }
 
