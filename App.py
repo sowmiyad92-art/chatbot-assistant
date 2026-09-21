@@ -29,7 +29,7 @@ db.init_db()
 # ---------- Custom CSS: design system ----------
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
     --bg: #0c0c0e;
@@ -51,13 +51,6 @@ html, body, [class*="css"] {
 }
 
 button, textarea, input, select, [data-baseweb] { font-family: 'JetBrains Mono', monospace !important; }
-
-[data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] *,
-[data-testid="stChatMessageContent"] *, [data-testid="stCaptionContainer"] *,
-.stButton button p, label p, [data-testid="stExpander"] summary p,
-[data-baseweb="select"] *, [data-testid="stAlert"] * {
-    font-family: 'JetBrains Mono', monospace !important;
-}
 
 * { scrollbar-color: var(--border) var(--bg); }
 
@@ -157,7 +150,7 @@ section[data-testid="stSidebar"] .st-key-new_session_btn .stButton button:hover 
     gap: 10px;
     padding: 10px 12px;
     border-bottom: 1px solid var(--border);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Inter', sans-serif;
     font-size: 14px;
     cursor: pointer;
     border-radius: 4px;
@@ -189,7 +182,7 @@ div[class*="st-key-session_row_"]:hover .stButton {
     padding: 12px 14px !important;
     margin-bottom: 10px;
 }
-div[data-testid="stChatMessageContent"] { font-family: 'JetBrains Mono', monospace; }
+div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
 
 [data-testid="stChatMessageAvatarUser"], [data-testid="stChatMessageAvatarAssistant"],
 [data-testid*="Avatar"] {
@@ -280,7 +273,7 @@ section[data-testid="stSidebar"] .stButton button {
     color: var(--text-dim) !important;
     border: none !important;
     text-align: left !important;
-    font-family: 'JetBrains Mono', monospace !important;
+    font-family: 'Inter', sans-serif !important;
     font-weight: 400 !important;
     padding: 8px 4px !important;
     border-bottom: 1px solid var(--border) !important;
