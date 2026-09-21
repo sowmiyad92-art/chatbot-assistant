@@ -20,7 +20,29 @@ def _html_escape(text):
     )
 
 
-CAT_SVG = """<div style="text-align:center;padding:4px 0 8px"><svg width="72" height="72" viewBox="0 0 120 120" role="img" aria-label="Aadsia mascot"><polygon points="20,48 26,8 58,30" fill="#a86d10"/><polygon points="20,44 26,4 58,26" fill="#f5a623"/><polygon points="100,48 94,8 62,30" fill="#a86d10"/><polygon points="100,44 94,4 62,26" fill="#f5a623"/><rect x="14" y="34" width="92" height="72" rx="32" fill="#a86d10"/><rect x="14" y="30" width="92" height="72" rx="32" fill="#f5a623"/><rect x="25" y="42" width="70" height="46" rx="20" fill="#0c0c0e"/><ellipse cx="45" cy="60" rx="7" ry="9" fill="#4ec9a0"/><ellipse cx="75" cy="60" rx="7" ry="9" fill="#4ec9a0"/><polygon points="56,71 64,71 60,75" fill="#4ec9a0"/><path d="M52 78 Q56 82 60 77 Q64 82 68 78" stroke="#4ec9a0" stroke-width="2.5" fill="none" stroke-linecap="round"/><g stroke="#f5a623" stroke-width="2.5" stroke-linecap="round"><line x1="14" y1="64" x2="2" y2="60"/><line x1="14" y1="72" x2="1" y2="72"/><line x1="14" y1="80" x2="2" y2="85"/><line x1="106" y1="64" x2="118" y2="60"/><line x1="106" y1="72" x2="119" y2="72"/><line x1="106" y1="80" x2="118" y2="85"/></g></svg></div>"""
+def cat_html(state="idle", label=""):
+    col = "#f5a623" if state in ("limited", "check") else "#4ec9a0"
+    if state == "done":
+        eyes = (f'<path d="M37 63 Q45 51 53 63" stroke="{col}" stroke-width="4" fill="none" stroke-linecap="round"/>'
+                f'<path d="M67 63 Q75 51 83 63" stroke="{col}" stroke-width="4" fill="none" stroke-linecap="round"/>')
+    else:
+        eyes = (f'<g class="eyes"><ellipse cx="45" cy="60" rx="7" ry="9" fill="{col}"/>'
+                f'<ellipse cx="75" cy="60" rx="7" ry="9" fill="{col}"/></g>')
+    mouths = {"search": "M53 79 L67 79", "check": "M54 78 Q60 82 66 78",
+              "done": "M50 76 Q60 88 70 76", "limited": "M53 80 Q60 76 67 80"}
+    mouth = mouths.get(state, "M52 78 Q56 82 60 77 Q64 82 68 78")
+    wk = "".join(f'<line class="wk" x1="{a}" y1="{b}" x2="{c}" y2="{d}" stroke="#f5a623" stroke-width="2.5" stroke-linecap="round"/>'
+                 for a, b, c, d in [(14,64,2,60),(14,72,1,72),(14,80,2,85),(106,64,118,60),(106,72,119,72),(106,80,118,85)])
+    lab = f'<div class="lab">{label}</div>' if label else ""
+    return ('<div class="cat-wrap"><svg class="cat ' + state + '" width="88" height="88" viewBox="0 0 120 120" role="img" aria-label="Aadsia mascot">'
+            '<g class="earL"><polygon points="20,48 26,8 58,30" fill="#a86d10"/><polygon points="20,44 26,4 58,26" fill="#f5a623"/></g>'
+            '<g class="earR"><polygon points="100,48 94,8 62,30" fill="#a86d10"/><polygon points="100,44 94,4 62,26" fill="#f5a623"/></g>'
+            '<rect x="14" y="34" width="92" height="72" rx="32" fill="#a86d10"/><rect x="14" y="30" width="92" height="72" rx="32" fill="#f5a623"/>'
+            '<rect x="25" y="42" width="70" height="46" rx="20" fill="#0c0c0e"/>' + eyes +
+            f'<polygon points="56,71 64,71 60,75" fill="{col}"/>'
+            f'<path d="{mouth}" stroke="{col}" stroke-width="2.5" fill="none" stroke-linecap="round"/>'
+            + wk + '</svg>' + lab + '</div>')
+
 
 st.set_page_config(page_title="Aadsia", page_icon="◆", layout="wide")
 
@@ -283,6 +305,8 @@ section[data-testid="stSidebar"] .stButton button:hover {
     color: var(--text) !important;
     background-color: rgba(255,255,255,0.03) !important;
 }
+
+.cat-wrap { text-align: center; padding: 4px 0 8px; }.cat-wrap .lab { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim); margin-top: 2px; }.cat .earL, .cat .earR, .cat .eyes { transform-box: fill-box; }.cat .earL, .cat .earR { transform-origin: 50% 100%; transition: transform .3s ease-out; }.cat .eyes { transform-origin: center; }.cat.idle .eyes { animation: catbl 3s infinite; }.cat.search .eyes { animation: catsc .9s ease-in-out infinite alternate; }.cat.search .earL { animation: catpl .7s ease-in-out infinite alternate; }.cat.search .earR { animation: catpr .7s ease-in-out infinite alternate .35s; }.cat.check .wk { animation: catwh .6s ease-in-out infinite alternate; }.cat.check .wk:nth-child(2) { animation-delay: .1s; }.cat.check .wk:nth-child(3) { animation-delay: .2s; }.cat.check .wk:nth-child(4) { animation-delay: .3s; }.cat.check .wk:nth-child(5) { animation-delay: .4s; }.cat.check .wk:nth-child(6) { animation-delay: .5s; }.cat.done .earL { transform: rotate(-6deg); } .cat.done .earR { transform: rotate(6deg); }.cat.limited .earL { transform: rotate(-30deg); } .cat.limited .earR { transform: rotate(30deg); }@keyframes catbl { 0%,92%,100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }@keyframes catsc { from { transform: translateX(-5px); } to { transform: translateX(5px); } }@keyframes catpl { from { transform: rotate(-10deg); } to { transform: rotate(4deg); } }@keyframes catpr { from { transform: rotate(10deg); } to { transform: rotate(-4deg); } }@keyframes catwh { from { stroke: #f5a623; } to { stroke: #4ec9a0; } }
 </style>
 """, unsafe_allow_html=True)
 
@@ -434,7 +458,10 @@ with st.sidebar:
         st.caption(f"frequent queries unavailable ({e})")
 
 # ---------- Main chat area ----------
-st.markdown(CAT_SVG, unsafe_allow_html=True)
+if "cat_state" not in st.session_state:
+    st.session_state.cat_state = ("idle", "")
+cat_slot = st.empty()
+cat_slot.markdown(cat_html(*st.session_state.cat_state), unsafe_allow_html=True)
 st.markdown("## Aadsia")
 if st.session_state.show_subtitle:
     st.caption("groq · supabase · tavily — verified web-grounded answers")
@@ -578,12 +605,14 @@ if prompt:
 
         search_attempted = False
         if should_search:
+            cat_slot.markdown(cat_html("search", "searching…"), unsafe_allow_html=True)
             with st.spinner("Searching the web..."):
                 search_attempted = True
                 search_results, search_provider = search.search_web(prompt, provider=provider_choice)
                 st.session_state.search_usage_count += 1
                 if search_provider:
                     db.log_search_usage(search_provider)
+        cat_slot.markdown(cat_html("check", "checking sources…") if search_attempted else cat_html("idle", "thinking…"), unsafe_allow_html=True)
         with st.spinner("Thinking..."):
             try:
                 result = llm.get_response(
@@ -596,6 +625,15 @@ if prompt:
             except Exception as e:
                 reply = f"⚠️ Error calling Groq API: {e}"
                 result = {"text": reply, "sources": None, "status": "NONE", "model": st.session_state.selected_model, "error": True}
+        if result.get("error"):
+            st.session_state.cat_state = ("limited", "error, try again")
+        elif result["status"] == "VERIFIED":
+            m = result.get("match")
+            st.session_state.cat_state = ("done", f"verified · {m['matched']} of {m['total']} facts matched" if m else "verified")
+        elif result["status"] == "LIMITED":
+            st.session_state.cat_state = ("limited", "limited confidence")
+        else:
+            st.session_state.cat_state = ("idle", "")
         st.write(reply)
 
     db.save_message(
