@@ -52,6 +52,13 @@ html, body, [class*="css"] {
 
 button, textarea, input, select, [data-baseweb] { font-family: 'JetBrains Mono', monospace !important; }
 
+[data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] *,
+[data-testid="stChatMessageContent"] *, [data-testid="stCaptionContainer"] *,
+.stButton button p, label p, [data-testid="stExpander"] summary p,
+[data-baseweb="select"] *, [data-testid="stAlert"] * {
+    font-family: 'JetBrains Mono', monospace !important;
+}
+
 * { scrollbar-color: var(--border) var(--bg); }
 
 .stApp { background-color: var(--bg); }
@@ -95,14 +102,17 @@ header, [data-testid*="Header"] {
     background-color: var(--bg) !important;
 }
 textarea, [data-testid*="ChatInput"] textarea, [class*="stChatInput"] textarea {
-    background-color: var(--bg-input) !important;
+    background-color: transparent !important;
     color: var(--text) !important;
-    border: 1px solid var(--border) !important;
+    border: none !important;
+}
+textarea::placeholder { color: var(--text-dim) !important; }
+[data-testid="stChatInput"] {
+    background-color: var(--bg-input) !important;
     border-bottom: 4px solid var(--border) !important;
     border-radius: 16px !important;
 }
-textarea::placeholder { color: var(--text-dim) !important; }
-div:has(> div > textarea) { background-color: var(--bg) !important; }
+div:has(> div > textarea) { background-color: transparent !important; }
 
 section[data-testid="stSidebar"] {
     background-color: var(--bg-sidebar);
@@ -127,7 +137,7 @@ section[data-testid="stSidebar"] h3 {
     font-weight: 500 !important;
 }
 
-section[data-testid="stSidebar"] .stButton:first-of-type button {
+section[data-testid="stSidebar"] .st-key-new_session_btn .stButton button {
     font-family: 'JetBrains Mono', monospace !important;
     background-color: #f5a623 !important;
     color: #1a1204 !important;
@@ -137,7 +147,7 @@ section[data-testid="stSidebar"] .stButton:first-of-type button {
     font-weight: 500 !important;
     text-align: center !important;
 }
-section[data-testid="stSidebar"] .stButton:first-of-type button:hover {
+section[data-testid="stSidebar"] .st-key-new_session_btn .stButton button:hover {
     background-color: #ffb83d !important;
 }
 
@@ -147,7 +157,7 @@ section[data-testid="stSidebar"] .stButton:first-of-type button:hover {
     gap: 10px;
     padding: 10px 12px;
     border-bottom: 1px solid var(--border);
-    font-family: 'Inter', sans-serif;
+    font-family: 'JetBrains Mono', monospace;
     font-size: 14px;
     cursor: pointer;
     border-radius: 4px;
@@ -179,7 +189,7 @@ div[class*="st-key-session_row_"]:hover .stButton {
     padding: 12px 14px !important;
     margin-bottom: 10px;
 }
-div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
+div[data-testid="stChatMessageContent"] { font-family: 'JetBrains Mono', monospace; }
 
 [data-testid="stChatMessageAvatarUser"], [data-testid="stChatMessageAvatarAssistant"],
 [data-testid*="Avatar"] {
@@ -270,7 +280,7 @@ section[data-testid="stSidebar"] .stButton button {
     color: var(--text-dim) !important;
     border: none !important;
     text-align: left !important;
-    font-family: 'Inter', sans-serif !important;
+    font-family: 'JetBrains Mono', monospace !important;
     font-weight: 400 !important;
     padding: 8px 4px !important;
     border-bottom: 1px solid var(--border) !important;
@@ -318,7 +328,7 @@ if "show_all_sessions" not in st.session_state:
 
 with st.sidebar:
     st.markdown("### Sessions")
-    if st.button("+ new_session", use_container_width=True):
+    if st.button("+ new_session", key="new_session_btn", use_container_width=True):
         new_id = db.create_session("New chat")
         st.session_state.current_session_id = new_id
         st.query_params["session_id"] = str(new_id)
