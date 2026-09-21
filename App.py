@@ -23,25 +23,50 @@ def _html_escape(text):
 def cat_html(state="idle", label=""):
     col = "#f5a623" if state in ("limited", "check") else "#4ec9a0"
     if state == "done":
-        eyes = (f'<path d="M37 63 Q45 51 53 63" stroke="{col}" stroke-width="4" fill="none" stroke-linecap="round"/>'
-                f'<path d="M67 63 Q75 51 83 63" stroke="{col}" stroke-width="4" fill="none" stroke-linecap="round"/>')
+        eyes = (
+            f'<path d="M37 63 Q45 51 53 63" stroke="{col}" stroke-width="4" fill="none" stroke-linecap="round"/>'
+            f'<path d="M67 63 Q75 51 83 63" stroke="{col}" stroke-width="4" fill="none" stroke-linecap="round"/>'
+        )
     else:
-        eyes = (f'<g class="eyes"><ellipse cx="45" cy="60" rx="7" ry="9" fill="{col}"/>'
-                f'<ellipse cx="75" cy="60" rx="7" ry="9" fill="{col}"/></g>')
-    mouths = {"search": "M53 79 L67 79", "check": "M54 78 Q60 82 66 78",
-              "done": "M50 76 Q60 88 70 76", "limited": "M53 80 Q60 76 67 80"}
+        eyes = (
+            f'<g class="eyes"><ellipse cx="45" cy="60" rx="7" ry="9" fill="{col}"/>'
+            f'<ellipse cx="75" cy="60" rx="7" ry="9" fill="{col}"/></g>'
+        )
+    mouths = {
+        "search": "M53 79 L67 79",
+        "check": "M54 78 Q60 82 66 78",
+        "done": "M50 76 Q60 88 70 76",
+        "limited": "M53 80 Q60 76 67 80",
+    }
     mouth = mouths.get(state, "M52 78 Q56 82 60 77 Q64 82 68 78")
-    wk = "".join(f'<line class="wk" x1="{a}" y1="{b}" x2="{c}" y2="{d}" stroke="#f5a623" stroke-width="2.5" stroke-linecap="round"/>'
-                 for a, b, c, d in [(14,64,2,60),(14,72,1,72),(14,80,2,85),(106,64,118,60),(106,72,119,72),(106,80,118,85)])
+    wk = "".join(
+        f'<line class="wk" x1="{a}" y1="{b}" x2="{c}" y2="{d}" stroke="#f5a623" stroke-width="2.5" stroke-linecap="round"/>'
+        for a, b, c, d in [
+            (14, 64, 2, 60),
+            (14, 72, 1, 72),
+            (14, 80, 2, 85),
+            (106, 64, 118, 60),
+            (106, 72, 119, 72),
+            (106, 80, 118, 85),
+        ]
+    )
     lab = f'<div class="lab">{label}</div>' if label else ""
-    return ('<div class="cat-wrap"><svg class="cat ' + state + '" width="88" height="88" viewBox="0 0 120 120" role="img" aria-label="Aadsia mascot">'
-            '<g class="earL"><polygon points="20,48 26,8 58,30" fill="#a86d10"/><polygon points="20,44 26,4 58,26" fill="#f5a623"/></g>'
-            '<g class="earR"><polygon points="100,48 94,8 62,30" fill="#a86d10"/><polygon points="100,44 94,4 62,26" fill="#f5a623"/></g>'
-            '<rect x="14" y="34" width="92" height="72" rx="32" fill="#a86d10"/><rect x="14" y="30" width="92" height="72" rx="32" fill="#f5a623"/>'
-            '<rect x="25" y="42" width="70" height="46" rx="20" fill="#0c0c0e"/>' + eyes +
-            f'<polygon points="56,71 64,71 60,75" fill="{col}"/>'
-            f'<path d="{mouth}" stroke="{col}" stroke-width="2.5" fill="none" stroke-linecap="round"/>'
-            + wk + '</svg>' + lab + '</div>')
+    return (
+        '<div class="cat-wrap"><svg class="cat '
+        + state
+        + '" width="88" height="88" viewBox="0 0 120 120" role="img" aria-label="Aadsia mascot">'
+        '<g class="earL"><polygon points="20,48 26,8 58,30" fill="#a86d10"/><polygon points="20,44 26,4 58,26" fill="#f5a623"/></g>'
+        '<g class="earR"><polygon points="100,48 94,8 62,30" fill="#a86d10"/><polygon points="100,44 94,4 62,26" fill="#f5a623"/></g>'
+        '<rect x="14" y="34" width="92" height="72" rx="32" fill="#a86d10"/><rect x="14" y="30" width="92" height="72" rx="32" fill="#f5a623"/>'
+        '<rect x="25" y="42" width="70" height="46" rx="20" fill="#0c0c0e"/>'
+        + eyes
+        + f'<polygon points="56,71 64,71 60,75" fill="{col}"/>'
+        f'<path d="{mouth}" stroke="{col}" stroke-width="2.5" fill="none" stroke-linecap="round"/>'
+        + wk
+        + "</svg>"
+        + lab
+        + "</div>"
+    )
 
 
 st.set_page_config(page_title="Aadsia", page_icon="◆", layout="wide")
@@ -49,7 +74,8 @@ st.set_page_config(page_title="Aadsia", page_icon="◆", layout="wide")
 db.init_db()
 
 # ---------- Custom CSS: design system ----------
-st.markdown("""
+st.markdown(
+    """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap');
 
@@ -309,8 +335,12 @@ section[data-testid="stSidebar"] .stButton button:hover {
 .cat-wrap { text-align: center; padding: 4px 0 8px; }.cat-wrap .lab { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim); margin-top: 2px; }.cat .earL, .cat .earR, .cat .eyes { transform-box: fill-box; }.cat .earL, .cat .earR { transform-origin: 50% 100%; transition: transform .3s ease-out; }.cat .eyes { transform-origin: center; }.cat.idle .eyes { animation: catbl 3s infinite; }.cat.search .eyes { animation: catsc .9s ease-in-out infinite alternate; }.cat.search .earL { animation: catpl .7s ease-in-out infinite alternate; }.cat.search .earR { animation: catpr .7s ease-in-out infinite alternate .35s; }.cat.check .wk { animation: catwh .6s ease-in-out infinite alternate; }.cat.check .wk:nth-child(2) { animation-delay: .1s; }.cat.check .wk:nth-child(3) { animation-delay: .2s; }.cat.check .wk:nth-child(4) { animation-delay: .3s; }.cat.check .wk:nth-child(5) { animation-delay: .4s; }.cat.check .wk:nth-child(6) { animation-delay: .5s; }.cat.done .earL { transform: rotate(-6deg); } .cat.done .earR { transform: rotate(6deg); }.cat.limited .earL { transform: rotate(-30deg); } .cat.limited .earR { transform: rotate(30deg); }@keyframes catbl { 0%,92%,100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }@keyframes catsc { from { transform: translateX(-5px); } to { transform: translateX(5px); } }@keyframes catpl { from { transform: rotate(-10deg); } to { transform: rotate(4deg); } }@keyframes catpr { from { transform: rotate(10deg); } to { transform: rotate(-4deg); } }@keyframes catwh { from { stroke: #f5a623; } to { stroke: #4ec9a0; } }
 
 .cat-wrap svg.cat { width: 110px; height: 110px; }
+
+.status-none { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim) !important; margin-left: 14px; margin-top: 6px; }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 _PROVIDER_MODE_MAP = {
     "Auto": "auto",
@@ -354,7 +384,9 @@ with st.sidebar:
         st.rerun()
 
     sessions = db.get_sessions()
-    visible_sessions = sessions if st.session_state.show_all_sessions else sessions[:5]
+    visible_sessions = (
+        sessions if st.session_state.show_all_sessions else sessions[:5]
+    )
 
     for s in visible_sessions:
         with st.container(key=f"session_row_{s['id']}"):
@@ -373,15 +405,27 @@ with st.sidebar:
                     db.delete_session(s["id"])
                     remaining = db.get_sessions()
                     if remaining:
-                        st.session_state.current_session_id = remaining[0]["id"]
+                        st.session_state.current_session_id = remaining[0][
+                            "id"
+                        ]
                     else:
-                        st.session_state.current_session_id = db.create_session("New chat")
+                        st.session_state.current_session_id = (
+                            db.create_session("New chat")
+                        )
                     st.rerun()
 
     if len(sessions) > 5:
-        toggle_label = "▾ show fewer" if st.session_state.show_all_sessions else f"▸ show {len(sessions) - 5} more"
-        if st.button(toggle_label, key="toggle_sessions", use_container_width=True):
-            st.session_state.show_all_sessions = not st.session_state.show_all_sessions
+        toggle_label = (
+            "▾ show fewer"
+            if st.session_state.show_all_sessions
+            else f"▸ show {len(sessions) - 5} more"
+        )
+        if st.button(
+            toggle_label, key="toggle_sessions", use_container_width=True
+        ):
+            st.session_state.show_all_sessions = (
+                not st.session_state.show_all_sessions
+            )
             st.rerun()
 
     st.markdown("---")
@@ -401,9 +445,9 @@ with st.sidebar:
         index=0,
         horizontal=True,
         help="Auto: Groq decides per-question if live search is needed (saves search credits), "
-             "UNLESS you've forced a specific search provider below — forcing a provider always "
-             "searches, since picking one is itself a clear signal you want a search this turn. "
-             "Always: search every message. Off: never search.",
+        "UNLESS you've forced a specific search provider below — forcing a provider always "
+        "searches, since picking one is itself a clear signal you want a search this turn. "
+        "Always: search every message. Off: never search.",
     )
     st.session_state.web_search_mode = web_search_mode
 
@@ -412,19 +456,21 @@ with st.sidebar:
         options=["Auto", "Exa only", "Tavily only", "YouTube only"],
         index=0,
         help="Auto: routes YouTube-shaped queries (views, trending, @handles) to the "
-             "YouTube API, everything else Exa first with Tavily as automatic fallback. "
-             "Forcing one provider disables all fallback/routing AND always searches "
-             "(bypasses the Auto web-search classifier above).",
+        "YouTube API, everything else Exa first with Tavily as automatic fallback. "
+        "Forcing one provider disables all fallback/routing AND always searches "
+        "(bypasses the Auto web-search classifier above).",
     )
     st.session_state.search_provider_mode = search_provider_mode
 
     st.markdown("---")
     with st.expander("⚙ Settings"):
         st.session_state.show_subtitle = st.checkbox(
-            "Show tagline (groq · supabase · tavily)", value=st.session_state.show_subtitle
+            "Show tagline (groq · supabase · tavily)",
+            value=st.session_state.show_subtitle,
         )
         st.session_state.show_full_model_name = st.checkbox(
-            "Show full model name on badge", value=st.session_state.show_full_model_name
+            "Show full model name on badge",
+            value=st.session_state.show_full_model_name,
         )
 
     st.markdown("---")
@@ -441,11 +487,13 @@ with st.sidebar:
                 this_month_count = p["by_month"].get(current_month, 0)
                 st.markdown(
                     f'<span class="tavily-usage">{provider}: {p["total"]} total · '
-                    f'{this_month_count} this month</span>',
+                    f"{this_month_count} this month</span>",
                     unsafe_allow_html=True,
                 )
         except Exception as e:
-            st.caption(f"usage stats unavailable ({e}) — has the search_log table been created?")
+            st.caption(
+                f"usage stats unavailable ({e}) — has the search_log table been created?"
+            )
 
     st.markdown("---")
     st.markdown("### Frequent queries")
@@ -453,7 +501,11 @@ with st.sidebar:
         top_queries = db.get_top_queries(limit=15)
         for tq in top_queries:
             label = tq["query"][:40] + ("..." if len(tq["query"]) > 40 else "")
-            if st.button(f"{label} ({tq['count']}x)", key=f"topq_{hash(tq['query'])}", use_container_width=True):
+            if st.button(
+                f"{label} ({tq['count']}x)",
+                key=f"topq_{hash(tq['query'])}",
+                use_container_width=True,
+            ):
                 st.session_state.pending_query = tq["query"]
                 st.rerun()
     except Exception as e:
@@ -466,7 +518,9 @@ if "cat_state" not in st.session_state:
 with st.container(key="cat_bar"):
     cat_slot = st.empty()
 
-cat_slot.markdown(cat_html(*st.session_state.cat_state), unsafe_allow_html=True)
+cat_slot.markdown(
+    cat_html(*st.session_state.cat_state), unsafe_allow_html=True
+)
 st.markdown("## Aadsia")
 if st.session_state.show_subtitle:
     st.caption("groq · supabase · tavily — verified web-grounded answers")
@@ -496,16 +550,30 @@ for i, msg in enumerate(history):
             if extra:
                 status = extra.get("status")
                 sources = extra.get("sources")
-                provider_tag = f" · via {extra.get('provider')}" if extra.get("provider") else ""
-                
+                provider_tag = (
+                    f" · via {extra.get('provider')}"
+                    if extra.get("provider")
+                    else ""
+                )
+
                 m = extra.get("match")
-                mt = f" · {m['matched']} of {m['total']} facts matched" if m else ""
-                
+                mt = (
+                    f" · {m['matched']} of {m['total']} facts matched"
+                    if m
+                    else ""
+                )
+
                 if status == "VERIFIED" and sources:
-                    st.markdown(f'<div class="status-verified">VERIFIED · {len(sources)} sources{mt}{provider_tag}</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="status-verified">VERIFIED · {len(sources)} sources{mt}{provider_tag}</div>',
+                        unsafe_allow_html=True,
+                    )
                 elif status == "LIMITED" and sources:
-                    st.markdown(f'<div class="status-limited">LIMITED · {len(sources)} sources{mt}{provider_tag}</div>', unsafe_allow_html=True)
-                
+                    st.markdown(
+                        f'<div class="status-limited">LIMITED · {len(sources)} sources{mt}{provider_tag}</div>',
+                        unsafe_allow_html=True,
+                    )
+
                 if sources:
                     with st.expander(f"see sources · {len(sources)}"):
                         lines = "".join(
@@ -513,20 +581,47 @@ for i, msg in enumerate(history):
                             f'<a href="{_html_escape(s["url"])}" target="_blank">{_html_escape(s["url"])}</a></div>'
                             for s in sources
                         )
-                        st.markdown(f'<div class="sources-panel">{lines}</div>', unsafe_allow_html=True)
+                        st.markdown(
+                            f'<div class="sources-panel">{lines}</div>',
+                            unsafe_allow_html=True,
+                        )
 
-            model_for_badge = extra["model"] if extra and extra.get("model") else st.session_state.selected_model
-            model_label = f"⚡ groq/{model_for_badge}" if st.session_state.show_full_model_name else "⚡"
-            st.markdown(f'<span class="model-badge" title="groq/{model_for_badge}">{model_label}</span>', unsafe_allow_html=True)
+            if not (extra and (extra.get("sources") or extra.get("error"))):
+                st.markdown(
+                    '<div class="status-none">from model knowledge · not verified against sources</div>',
+                    unsafe_allow_html=True,
+                )
 
-            safe_text = msg["content"].replace("\\", "\\\\").replace("`", "'").replace("\n", "\\n").replace('"', '\\"')
+            model_for_badge = (
+                extra["model"]
+                if extra and extra.get("model")
+                else st.session_state.selected_model
+            )
+            model_label = (
+                f"⚡ groq/{model_for_badge}"
+                if st.session_state.show_full_model_name
+                else "⚡"
+            )
+            st.markdown(
+                f'<span class="model-badge" title="groq/{model_for_badge}">{model_label}</span>',
+                unsafe_allow_html=True,
+            )
+
+            safe_text = (
+                msg["content"]
+                .replace("\\", "\\\\")
+                .replace("`", "'")
+                .replace("\n", "\\n")
+                .replace('"', '\\"')
+            )
             html_escaped_content = (
                 msg["content"]
                 .replace("&", "&amp;")
                 .replace("<", "&lt;")
                 .replace(">", "&gt;")
             )
-            components.html(f"""
+            components.html(
+                f"""
                 <style>
                   body {{ margin: 0; }}
                   .copy-btn {{
@@ -564,7 +659,9 @@ for i, msg in enumerate(history):
                     setTimeout(function() {{ btn.innerText = "copy"; }}, 1500);
                   }});
                 </script>
-            """, height=32)
+            """,
+                height=32,
+            )
 
 prompt = st.chat_input("Type a message...")
 if not prompt and st.session_state.get("pending_query"):
@@ -604,7 +701,18 @@ if prompt:
             should_search = True
         elif youtube.is_youtube_intent(prompt):
             should_search = True
-        elif any(kw in prompt.lower() for kw in ["today", "this week", "this month", "latest", "current", "right now", "breaking"]):
+        elif any(
+            kw in prompt.lower()
+            for kw in [
+                "today",
+                "this week",
+                "this month",
+                "latest",
+                "current",
+                "right now",
+                "breaking",
+            ]
+        ):
             should_search = True
         else:
             with st.spinner("Checking if this needs live data..."):
@@ -612,17 +720,29 @@ if prompt:
 
         search_attempted = False
         if should_search:
-            live.markdown(cat_html("search", "searching…"), unsafe_allow_html=True)
+            live.markdown(
+                cat_html("search", "searching…"), unsafe_allow_html=True
+            )
             with st.spinner("Searching the web..."):
                 search_attempted = True
-                list_like = any(w in prompt.lower() for w in ["best", "top", "list", "ranking", "ranked"])
+                list_like = any(
+                    w in prompt.lower()
+                    for w in ["best", "top", "list", "ranking", "ranked"]
+                )
                 search_results, search_provider = search.search_web(
-                    prompt, provider=provider_choice, content_chars=1500 if list_like else None
+                    prompt,
+                    provider=provider_choice,
+                    content_chars=1500 if list_like else None,
                 )
                 st.session_state.search_usage_count += 1
                 if search_provider:
                     db.log_search_usage(search_provider)
-        live.markdown(cat_html("check", "checking sources…") if search_attempted else cat_html("idle", "thinking…"), unsafe_allow_html=True)
+        live.markdown(
+            cat_html("check", "checking sources…")
+            if search_attempted
+            else cat_html("idle", "thinking…"),
+            unsafe_allow_html=True,
+        )
         with st.spinner("Thinking..."):
             try:
                 result = llm.get_response(
@@ -634,12 +754,23 @@ if prompt:
                 reply = result["text"]
             except Exception as e:
                 reply = f"⚠️ Error calling Groq API: {e}"
-                result = {"text": reply, "sources": None, "status": "NONE", "model": st.session_state.selected_model, "error": True}
+                result = {
+                    "text": reply,
+                    "sources": None,
+                    "status": "NONE",
+                    "model": st.session_state.selected_model,
+                    "error": True,
+                }
         if result.get("error"):
             st.session_state.cat_state = ("limited", "error, try again")
         elif result["status"] == "VERIFIED":
             m = result.get("match")
-            st.session_state.cat_state = ("done", f"verified · {m['matched']} of {m['total']} facts matched" if m else "verified")
+            st.session_state.cat_state = (
+                "done",
+                f"verified · {m['matched']} of {m['total']} facts matched"
+                if m
+                else "verified",
+            )
         elif result["status"] == "LIMITED":
             st.session_state.cat_state = ("limited", "limited confidence")
         else:
@@ -648,14 +779,16 @@ if prompt:
         st.write(reply)
 
     db.save_message(
-        session_id, "assistant", reply,
+        session_id,
+        "assistant",
+        reply,
         meta={
-            "status": result["status"], 
-            "sources": result["sources"], 
-            "model": result["model"], 
-            "provider": search_provider, 
+            "status": result["status"],
+            "sources": result["sources"],
+            "model": result["model"],
+            "provider": search_provider,
             "error": result.get("error", False),
-            "match": result.get("match")
+            "match": result.get("match"),
         },
     )
     st.rerun()
