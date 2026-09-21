@@ -1,5 +1,6 @@
 import calendar
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from groq import Groq
@@ -252,6 +253,53 @@ def _build_system_content(
     return system_content
 
 
+_STOP = {
+    "Here",
+    "The",
+    "This",
+    "That",
+    "Their",
+    "There",
+    "These",
+    "Those",
+    "However",
+    "Note",
+    "Sorry",
+}
+
+
+def _match_facts(text, search_results):
+    """Check numbers and names in the answer against the source text.
+    Returns {"matched": n, "total": m} or None if there is nothing to check.
+    """
+    if not search_results:
+        return None
+    today = datetime.now(timezone.utc).date().isoformat()
+    text = text.replace(today, "")
+    facts = set()
+    for m in re.findall(r"\d{4}-\d{2}-\d{2}", text):
+        facts.add(m)
+    for m in re.findall(r"\b\d[\d,]*(?:\.\d+)?%?", text):
+        n = m.replace(",", "")
+        if len(n.rstrip("%")) >= 3 or "%" in n or "." in n:
+            facts.add(n)
+    for m in re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b", text):
+        words = m.split()
+        while words and words[0] in _STOP:
+            words.pop(0)
+        if len(words) >= 2:
+            facts.add(" ".join(words).lower())
+    if not facts:
+        return None
+    src = (
+        " ".join(f"{r['title']} {r['content']}" for r in search_results)
+        .lower()
+        .replace(",", "")
+    )
+    matched = sum(1 for f in facts if f in src)
+    return {"matched": matched, "total": len(facts)}
+
+
 def get_response(
     messages,
     model=DEFAULT_MODEL,
@@ -270,6 +318,7 @@ def get_response(
             "sources": list | None,
             "status": "VERIFIED" | "LIMITED" | "NONE",
             "model": str,
+            "match": dict | None,
         }
     Status starts as a source-count heuristic, then gets downgraded if the
     model's own answer signals it couldn't actually use the sources it was
@@ -365,11 +414,13 @@ def get_response(
         phrase in text.lower() for phrase in _NO_USEFUL_DATA_PHRASES
     )
 
+    match = _match_facts(text, search_results)
+    ratio_ok = match is None or match["matched"] / match["total"] >= 0.6
     if not search_results:
         status = "NONE"
     elif model_found_nothing_useful:
         status = "LIMITED"
-    elif len(search_results) >= 2:
+    elif len(search_results) >= 2 and ratio_ok:
         status = "VERIFIED"
     else:
         status = "LIMITED"
@@ -379,4 +430,5 @@ def get_response(
         "sources": search_results,
         "status": status,
         "model": model,
+        "match": match,
     }
