@@ -615,7 +615,10 @@ if prompt:
             live.markdown(cat_html("search", "searching…"), unsafe_allow_html=True)
             with st.spinner("Searching the web..."):
                 search_attempted = True
-                search_results, search_provider = search.search_web(prompt, provider=provider_choice)
+                list_like = any(w in prompt.lower() for w in ["best", "top", "list", "ranking", "ranked"])
+                search_results, search_provider = search.search_web(
+                    prompt, provider=provider_choice, content_chars=1500 if list_like else None
+                )
                 st.session_state.search_usage_count += 1
                 if search_provider:
                     db.log_search_usage(search_provider)
