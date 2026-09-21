@@ -542,7 +542,7 @@ for i, msg in enumerate(history):
             f'<div class="role-label {role}">{role}<span class="time">{ts}</span></div>',
             unsafe_allow_html=True,
         )
-        st.write(msg["content"])
+        st.write(msg["content"].replace("$", "\\$"))
 
         if role == "assistant":
             extra = db.get_message_meta(msg)
@@ -776,7 +776,7 @@ if prompt:
         else:
             st.session_state.cat_state = ("idle", "")
         live.empty()
-        st.write(reply)
+        st.write(reply.replace("$", "\\$"))
 
     db.save_message(
         session_id,
