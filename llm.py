@@ -424,6 +424,12 @@ def get_response(
         "i'm not able to tell you",
         "i'm not finding any",
         "no fresh search results",
+        "i'm sorry",
+        "do not contain",
+        "do not include",
+        "does not contain",
+        "none of the search results",
+        "not present in the data",
     ]
     model_found_nothing_useful = search_results and any(
         phrase in text.lower().replace("\u2019", "'") for phrase in _NO_USEFUL_DATA_PHRASES
