@@ -275,14 +275,20 @@ def _norm(s):
     return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
 
 
-def _match_facts(text, search_results):
+def _match_facts(text, search_results, latest_query=None):
     """Check numbers and names in the answer against the source text.
     Returns {"matched": n, "total": m} or None if there is nothing to check.
     """
     if not search_results:
         return None
-    today = datetime.now(timezone.utc).date().isoformat()
-    text = _norm(text).replace(today, "")
+    today = datetime.now(timezone.utc).date()
+    text = _norm(text).replace(today.isoformat(), "")
+    
+    tf = _timeframe_range(latest_query, today) if latest_query else None
+    if tf:
+        for d in (tf[1], tf[2]):
+            text = text.replace(d.isoformat(), "")
+
     facts = set()
     for m in re.findall(r"\d{4}-\d{2}-\d{2}", text):
         facts.add(m)
@@ -290,6 +296,10 @@ def _match_facts(text, search_results):
         n = m.replace(",", "")
         if len(n.rstrip("%")) >= 3 or "%" in n or "." in n:
             facts.add(n)
+    for n, u in re.findall(
+        r"\b(\d{1,2})\s+(years?|days?|episodes?|seasons?|weeks?|months?)\b", text
+    ):
+        facts.add(f"{n} {u.rstrip('s')}")
     for m in re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b", text):
         words = m.split()
         while words and words[0] in _STOP:
@@ -419,7 +429,7 @@ def get_response(
         phrase in text.lower().replace("\u2019", "'") for phrase in _NO_USEFUL_DATA_PHRASES
     )
 
-    match = _match_facts(text, search_results)
+    match = _match_facts(text, search_results, latest_query)
     ratio_ok = (
         match is not None
         and match["total"] >= 2
