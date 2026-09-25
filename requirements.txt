@@ -13,3 +13,7 @@ youtube-transcript-api
 beautifulsoup4
 pypdf
 python-docx
+langchain-groq
+langgraph
+langchain-community
+pandas
