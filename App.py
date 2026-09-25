@@ -13,8 +13,9 @@ except ModuleNotFoundError:
 
 try:
     import sql_search
-except ModuleNotFoundError:
+except Exception as e:
     sql_search = None
+    print(f"[SQL_SEARCH IMPORT ERROR] {e}")
 
 try:
     import doc_search
