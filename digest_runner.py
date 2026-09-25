@@ -1,10 +1,10 @@
-# digest_runner.py
-
 import os
 import requests
 
 import db
 import digest_sections as sections
+from digest import compute_deltas
+from db import get_last_digest_run
 
 SECTION_BUILDERS = {
     "job_questions": sections.build_job_questions,
@@ -26,18 +26,42 @@ SECTION_HEADERS = {
     "world_trending_news": "🌍 World Trending",
 }
 
+TELEGRAM_MAX_LEN = 4096
+
 
 def send_telegram_message(chat_id, text):
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    resp = requests.post(url, json={
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": True,
-    })
-    resp.raise_for_status()
-    return resp.json()["result"]["message_id"]
+
+    # Telegram rejects messages over 4096 chars outright (400 Bad Request).
+    # Split on paragraph boundaries so we send multiple messages instead
+    # of silently failing the whole digest.
+    chunks = []
+    current = ""
+    for para in text.split("\n\n"):
+        if len(current) + len(para) + 2 > TELEGRAM_MAX_LEN:
+            if current:
+                chunks.append(current)
+            current = para
+        else:
+            current = f"{current}\n\n{para}" if current else para
+    if current:
+        chunks.append(current)
+
+    last_message_id = None
+    for chunk in chunks:
+        resp = requests.post(url, json={
+            "chat_id": chat_id,
+            "text": chunk,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        })
+        if resp.status_code != 200:
+            print(f"[digest_runner] telegram send failed: {resp.status_code} {resp.text}")
+        resp.raise_for_status()
+        last_message_id = resp.json()["result"]["message_id"]
+
+    return last_message_id
 
 
 def run_digest():
@@ -50,7 +74,6 @@ def run_digest():
         config_id = config["id"]
         chat_id = config["telegram_chat_id"]
         enabled_sections = config.get("sections", {})
-        yesterday = db.get_yesterday_payload(config_id) or {}
 
         payload = {}
         failures = []
@@ -60,15 +83,15 @@ def run_digest():
                 continue
             try:
                 result = SECTION_BUILDERS[key](config, config_id)
-                # simple delta check: skip if identical to yesterday's content
-                if key in ("ai_news", "ai_tool_launches", "world_trending_news", "youtube"):
-                    if result == yesterday.get(key):
-                        result = None  # nothing new today
                 payload[key] = result
             except Exception as e:
                 print(f"[digest_runner] section '{key}' failed: {e}")
                 failures.append(key)
                 payload[key] = None
+
+        # Compute deltas against the last digest run
+        last_payload = db.get_last_digest_run()
+        payload = compute_deltas(payload, last_payload)
 
         # format message
         lines = []

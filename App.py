@@ -1,8 +1,3 @@
-from dotenv import load_dotenv
-load_dotenv()
-from dotenv import load_dotenv
-load_dotenv()
-
 import streamlit as st
 import streamlit.components.v1 as components
 from datetime import datetime, timezone
@@ -10,7 +5,21 @@ import db
 import llm
 import search
 import youtube
-import kb_search
+
+try:
+    import kb_search
+except ModuleNotFoundError:
+    kb_search = None
+
+try:
+    import sql_search
+except ModuleNotFoundError:
+    sql_search = None
+
+try:
+    import doc_search
+except ModuleNotFoundError:
+    doc_search = None
 
 
 def _html_escape(text):
@@ -25,36 +34,118 @@ def _html_escape(text):
         .replace('"', "&quot;")
     )
 
+
+def cat_html(state="idle", label=""):
+    col = "#f5a623" if state in ("limited", "check") else "#4ec9a0"
+    if state == "done":
+        eyes = (
+            f'<path d="M37 63 Q45 51 53 63" stroke="{col}" stroke-width="4" fill="none" stroke-linecap="round"/>'
+            f'<path d="M67 63 Q75 51 83 63" stroke="{col}" stroke-width="4" fill="none" stroke-linecap="round"/>'
+        )
+    else:
+        eyes = (
+            f'<g class="eyes"><ellipse cx="45" cy="60" rx="7" ry="9" fill="{col}"/>'
+            f'<ellipse cx="75" cy="60" rx="7" ry="9" fill="{col}"/></g>'
+        )
+    mouths = {
+        "search": "M53 79 L67 79",
+        "check": "M54 78 Q60 82 66 78",
+        "done": "M50 76 Q60 88 70 76",
+        "limited": "M53 80 Q60 76 67 80",
+    }
+    mouth = mouths.get(state, "M52 78 Q56 82 60 77 Q64 82 68 78")
+    wk = "".join(
+        f'<line class="wk" x1="{a}" y1="{b}" x2="{c}" y2="{d}" stroke="#f5a623" stroke-width="2.5" stroke-linecap="round"/>'
+        for a, b, c, d in [
+            (14, 64, 2, 60),
+            (14, 72, 1, 72),
+            (14, 80, 2, 85),
+            (106, 64, 118, 60),
+            (106, 72, 119, 72),
+            (106, 80, 118, 85),
+        ]
+    )
+    lab = f'<div class="lab">{label}</div>' if label else ""
+    return (
+        '<div class="cat-wrap"><svg class="cat '
+        + state
+        + '" width="88" height="88" viewBox="0 0 120 120" role="img" aria-label="Aadsia mascot">'
+        '<g class="earL"><polygon points="20,48 26,8 58,30" fill="#a86d10"/><polygon points="20,44 26,4 58,26" fill="#f5a623"/></g>'
+        '<g class="earR"><polygon points="100,48 94,8 62,30" fill="#a86d10"/><polygon points="100,44 94,4 62,26" fill="#f5a623"/></g>'
+        '<rect x="14" y="34" width="92" height="72" rx="32" fill="#a86d10"/><rect x="14" y="30" width="92" height="72" rx="32" fill="#f5a623"/>'
+        '<rect x="25" y="42" width="70" height="46" rx="20" fill="#0c0c0e"/>'
+        + eyes
+        + f'<polygon points="56,71 64,71 60,75" fill="{col}"/>'
+        f'<path d="{mouth}" stroke="{col}" stroke-width="2.5" fill="none" stroke-linecap="round"/>'
+        + wk
+        + "</svg>"
+        + lab
+        + "</div>"
+    )
+
+
 st.set_page_config(page_title="Aadsia", page_icon="◆", layout="wide")
 
 db.init_db()
 
 # ---------- Custom CSS: design system ----------
-st.markdown("""
+st.markdown(
+    """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
-    --bg: #0B0E14;
-    --bg-sidebar: #10141C;
-    --bg-input: #161B24;
-    --bg-panel: #131720;
-    --text: #E8E6E0;
-    --text-dim: #6B7280;
-    --accent-user: #D9704A;
-    --accent-assistant: #6FA8AF;
-    --accent-verified: #34D399;   /* was #4CAF6D */
-    --accent-limited: #D97706;
-    --border: #232A36;
+    --bg: #0c0c0e;
+    --bg-sidebar: #141417;
+    --bg-input: #1c1c21;
+    --bg-panel: #1c1c21;
+    --text: #e4e4e8;
+    --text-dim: #a0a0aa;
+    --accent-user: #f5a623;
+    --accent-assistant: #c9c9d0;
+    --accent-verified: #4ec9a0;
+    --accent-limited: #f5a623;
+    --border: #303038;
 }
 
 html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
+    font-family: 'JetBrains Mono', monospace !important;
     color: var(--text) !important;
 }
+
+button, textarea, input, select, [data-baseweb] { font-family: 'JetBrains Mono', monospace !important; }
+
 * { scrollbar-color: var(--border) var(--bg); }
 
 .stApp { background-color: var(--bg); }
+
+/* Table styling for Markdown tables */
+table, [data-testid="stMarkdownContainer"] table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    color: var(--text) !important;
+    background-color: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+th, [data-testid="stMarkdownContainer"] th {
+    background-color: var(--bg-input);
+    color: var(--text) !important;
+    font-weight: 600;
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+}
+td, [data-testid="stMarkdownContainer"] td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text) !important;
+}
+tr:last-child td, [data-testid="stMarkdownContainer"] tr:last-child td {
+    border-bottom: none;
+}
 
 header, [data-testid*="Header"] {
     background-color: var(--bg) !important;
@@ -67,13 +158,17 @@ header, [data-testid*="Header"] {
     background-color: var(--bg) !important;
 }
 textarea, [data-testid*="ChatInput"] textarea, [class*="stChatInput"] textarea {
-    background-color: var(--bg-input) !important;
+    background-color: transparent !important;
     color: var(--text) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 8px !important;
+    border: none !important;
 }
 textarea::placeholder { color: var(--text-dim) !important; }
-div:has(> div > textarea) { background-color: var(--bg) !important; }
+[data-testid="stChatInput"] {
+    background-color: var(--bg-input) !important;
+    border-bottom: 4px solid var(--border) !important;
+    border-radius: 16px !important;
+}
+div:has(> div > textarea) { background-color: transparent !important; }
 
 section[data-testid="stSidebar"] {
     background-color: var(--bg-sidebar);
@@ -84,12 +179,11 @@ h1, h2, h3, p, span, label, li, ol, ul, .stCaption, div[data-testid="stCaptionCo
     color: var(--text) !important;
 }
 h1, h2, h3 {
-    font-family: 'Space Grotesk', sans-serif !important;
+    font-family: 'JetBrains Mono', monospace !important;
     letter-spacing: -0.02em;
 }
 div[data-testid="stCaptionContainer"] { color: var(--text-dim) !important; }
 
-/* Sidebar section labels: uppercase small-caps monospace, matching reference */
 section[data-testid="stSidebar"] h3 {
     font-family: 'JetBrains Mono', monospace !important;
     font-size: 12px !important;
@@ -99,18 +193,18 @@ section[data-testid="stSidebar"] h3 {
     font-weight: 500 !important;
 }
 
-/* "+ new_session" style button: bordered, monospace, green */
-section[data-testid="stSidebar"] .stButton:first-of-type button {
+section[data-testid="stSidebar"] .st-key-new_session_btn .stButton button {
     font-family: 'JetBrains Mono', monospace !important;
-    background-color: transparent !important;
-    color: var(--accent-verified) !important;
-    border: 1px solid var(--accent-verified) !important;
-    border-radius: 4px !important;
+    background-color: #f5a623 !important;
+    color: #1a1204 !important;
+    border: none !important;
+    border-bottom: 3px solid #a86d10 !important;
+    border-radius: 12px !important;
     font-weight: 500 !important;
     text-align: center !important;
 }
-section[data-testid="stSidebar"] .stButton:first-of-type button:hover {
-    background-color: rgba(76, 175, 109, 0.1) !important;
+section[data-testid="stSidebar"] .st-key-new_session_btn .stButton button:hover {
+    background-color: #ffb83d !important;
 }
 
 .session-row {
@@ -136,9 +230,6 @@ section[data-testid="stSidebar"] .stButton:first-of-type button:hover {
 .session-name { color: var(--text-dim); }
 .session-row.active .session-name { color: var(--text); font-weight: 500; }
 
-/* Hover-reveal delete icon — each session row is wrapped in
-   st.container(key=f"session_row_{id}"), which Streamlit renders as a div
-   with class "st-key-session_row_<id>". Requires Streamlit >= 1.32. */
 div[class*="st-key-session_row_"] .stButton {
     opacity: 0;
     transition: opacity 0.12s ease-in-out;
@@ -148,23 +239,20 @@ div[class*="st-key-session_row_"]:hover .stButton {
 }
 
 .stChatMessage {
-    background: transparent !important;
-    border-radius: 0 !important;
-    padding-left: 14px !important;
-    margin-bottom: 4px;
+    background: var(--bg-input) !important;
+    border-bottom: 4px solid var(--border);
+    border-radius: 16px !important;
+    padding: 12px 14px !important;
+    margin-bottom: 10px;
 }
 div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
 
-/* Hide default avatar icon entirely — reference design has no icon, just a colored border */
 [data-testid="stChatMessageAvatarUser"], [data-testid="stChatMessageAvatarAssistant"],
 [data-testid*="Avatar"] {
     display: none !important;
 }
 .stChatMessage:has(div[data-testid="stChatMessageAvatarUser"]) {
-    border-left: 2px solid var(--accent-user);
-}
-.stChatMessage:has(div[data-testid="stChatMessageAvatarAssistant"]) {
-    border-left: 2px solid var(--accent-assistant);
+    border-bottom-color: #a86d10;
 }
 
 .role-label {
@@ -183,7 +271,6 @@ div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
     font-size: 12px;
 }
 
-/* Model badge pill */
 .model-badge {
     display: inline-block;
     font-family: 'JetBrains Mono', monospace;
@@ -198,7 +285,6 @@ div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
     margin-bottom: 6px;
 }
 
-/* Copy button */
 .copy-btn {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
@@ -220,7 +306,6 @@ div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
     margin: 2px 0;
 }
 
-/* Status flags */
 .status-verified, .status-limited {
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
@@ -261,14 +346,16 @@ section[data-testid="stSidebar"] .stButton button:hover {
     color: var(--text) !important;
     background-color: rgba(255,255,255,0.03) !important;
 }
-</style>
-""", unsafe_allow_html=True)
 
-# NOTE: st.chat_message(avatar=...) is unreliable across Streamlit versions —
-# it validates against emoji ranges and can crash on both geometric shapes (●/◆)
-# AND standard emoji depending on the Streamlit/Python build (confirmed crash on
-# python3.14 here). We don't use avatar= at all — role labels (user/assistant)
-# are rendered as styled markdown text above each message instead.
+.cat-wrap { text-align: center; padding: 4px 0 8px; }.cat-wrap .lab { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim); margin-top: 2px; }.cat .earL, .cat .earR, .cat .eyes { transform-box: fill-box; }.cat .earL, .cat .earR { transform-origin: 50% 100%; transition: transform .3s ease-out; }.cat .eyes { transform-origin: center; }.cat.idle .eyes { animation: catbl 3s infinite; }.cat.search .eyes { animation: catsc .9s ease-in-out infinite alternate; }.cat.search .earL { animation: catpl .7s ease-in-out infinite alternate; }.cat.search .earR { animation: catpr .7s ease-in-out infinite alternate .35s; }.cat.check .wk { animation: catwh .6s ease-in-out infinite alternate; }.cat.check .wk:nth-child(2) { animation-delay: .1s; }.cat.check .wk:nth-child(3) { animation-delay: .2s; }.cat.check .wk:nth-child(4) { animation-delay: .3s; }.cat.check .wk:nth-child(5) { animation-delay: .4s; }.cat.check .wk:nth-child(6) { animation-delay: .5s; }.cat.done .earL { transform: rotate(-6deg); } .cat.done .earR { transform: rotate(6deg); }.cat.limited .earL { transform: rotate(-30deg); } .cat.limited .earR { transform: rotate(30deg); }@keyframes catbl { 0%,92%,100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }@keyframes catsc { from { transform: translateX(-5px); } to { transform: translateX(5px); } }@keyframes catpl { from { transform: rotate(-10deg); } to { transform: rotate(4deg); } }@keyframes catpr { from { transform: rotate(10deg); } to { transform: rotate(-4deg); } }@keyframes catwh { from { stroke: #f5a623; } to { stroke: #4ec9a0; } }
+
+.cat-wrap svg.cat { width: 110px; height: 110px; }
+
+.status-none { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim) !important; margin-left: 14px; margin-top: 6px; }
+</style>
+""",
+    unsafe_allow_html=True,
+)
 
 _PROVIDER_MODE_MAP = {
     "Auto": "auto",
@@ -276,12 +363,11 @@ _PROVIDER_MODE_MAP = {
     "Tavily only": "tavily",
     "YouTube only": "youtube",
     "Code KB": "code_kb",
+    "SQL / IMDb": "sql_imdb",
+    "Project Docs": "project_docs",
 }
 
 # ---------- Sidebar: sessions + settings ----------
-# Session switching uses a query param + <a href> link (not st.button) so the
-# active-session dot can be styled independently from the label text —
-# st.button only renders plain text, so the dot and text always shared one color.
 qp = st.query_params
 if "session_id" in qp:
     try:
@@ -299,9 +385,9 @@ if "current_session_id" not in st.session_state:
         st.session_state.current_session_id = db.create_session("New chat")
 
 if "show_subtitle" not in st.session_state:
-    st.session_state.show_subtitle = False   # hidden by default per your call
+    st.session_state.show_subtitle = False
 if "show_full_model_name" not in st.session_state:
-    st.session_state.show_full_model_name = False  # hidden by default, badge shows short form
+    st.session_state.show_full_model_name = False
 if "search_usage_count" not in st.session_state:
     st.session_state.search_usage_count = 0
 if "show_all_sessions" not in st.session_state:
@@ -309,14 +395,16 @@ if "show_all_sessions" not in st.session_state:
 
 with st.sidebar:
     st.markdown("### Sessions")
-    if st.button("+ new_session", use_container_width=True):
+    if st.button("+ new_session", key="new_session_btn", use_container_width=True):
         new_id = db.create_session("New chat")
         st.session_state.current_session_id = new_id
         st.query_params["session_id"] = str(new_id)
         st.rerun()
 
     sessions = db.get_sessions()
-    visible_sessions = sessions if st.session_state.show_all_sessions else sessions[:5]
+    visible_sessions = (
+        sessions if st.session_state.show_all_sessions else sessions[:5]
+    )
 
     for s in visible_sessions:
         with st.container(key=f"session_row_{s['id']}"):
@@ -335,15 +423,27 @@ with st.sidebar:
                     db.delete_session(s["id"])
                     remaining = db.get_sessions()
                     if remaining:
-                        st.session_state.current_session_id = remaining[0]["id"]
+                        st.session_state.current_session_id = remaining[0][
+                            "id"
+                        ]
                     else:
-                        st.session_state.current_session_id = db.create_session("New chat")
+                        st.session_state.current_session_id = (
+                            db.create_session("New chat")
+                        )
                     st.rerun()
 
     if len(sessions) > 5:
-        toggle_label = "▾ show fewer" if st.session_state.show_all_sessions else f"▸ show {len(sessions) - 5} more"
-        if st.button(toggle_label, key="toggle_sessions", use_container_width=True):
-            st.session_state.show_all_sessions = not st.session_state.show_all_sessions
+        toggle_label = (
+            "▾ show fewer"
+            if st.session_state.show_all_sessions
+            else f"▸ show {len(sessions) - 5} more"
+        )
+        if st.button(
+            toggle_label, key="toggle_sessions", use_container_width=True
+        ):
+            st.session_state.show_all_sessions = (
+                not st.session_state.show_all_sessions
+            )
             st.rerun()
 
     st.markdown("---")
@@ -363,31 +463,34 @@ with st.sidebar:
         index=0,
         horizontal=True,
         help="Auto: Groq decides per-question if live search is needed (saves search credits), "
-             "UNLESS you've forced a specific search provider below — forcing a provider always "
-             "searches, since picking one is itself a clear signal you want a search this turn. "
-             "Always: search every message. Off: never search.",
+        "UNLESS you've forced a specific search provider below — forcing a provider always "
+        "searches, since picking one is itself a clear signal you want a search this turn. "
+        "Always: search every message. Off: never search.",
     )
     st.session_state.web_search_mode = web_search_mode
 
     search_provider_mode = st.selectbox(
         "Search provider",
-        options=["Auto", "Exa only", "Tavily only", "YouTube only", "Code KB"],
-        index=0,
+        options=["Auto", "Exa only", "Tavily only", "YouTube only", "Code KB", "SQL / IMDb", "Project Docs"],
         help="Auto: routes YouTube-shaped queries (views, trending, @handles) to the "
-             "YouTube API, everything else Exa first with Tavily as automatic fallback. "
-             "Forcing one provider disables all fallback/routing AND always searches "
-             "(bypasses the Auto web-search classifier above). Code KB searches your "
-             "11-repo code knowledge base instead of the web.",
+        "YouTube API, everything else Exa first with Tavily as automatic fallback. "
+        "Forcing one provider disables all fallback/routing AND always searches "
+        "(bypasses the Auto web-search classifier above). Code KB searches your "
+        "11-repo code knowledge base instead of the web. SQL / IMDb runs a SQL "
+        "agent against the IMDb dataset instead of the web. Project Docs searches "
+        "your ingested project documents instead of the web.",
     )
     st.session_state.search_provider_mode = search_provider_mode
 
     st.markdown("---")
     with st.expander("⚙ Settings"):
         st.session_state.show_subtitle = st.checkbox(
-            "Show tagline (groq · supabase · tavily)", value=st.session_state.show_subtitle
+            "Show tagline (groq · supabase · tavily)",
+            value=st.session_state.show_subtitle,
         )
         st.session_state.show_full_model_name = st.checkbox(
-            "Show full model name on badge", value=st.session_state.show_full_model_name
+            "Show full model name on badge",
+            value=st.session_state.show_full_model_name,
         )
 
     st.markdown("---")
@@ -404,13 +507,40 @@ with st.sidebar:
                 this_month_count = p["by_month"].get(current_month, 0)
                 st.markdown(
                     f'<span class="tavily-usage">{provider}: {p["total"]} total · '
-                    f'{this_month_count} this month</span>',
+                    f"{this_month_count} this month</span>",
                     unsafe_allow_html=True,
                 )
         except Exception as e:
-            st.caption(f"usage stats unavailable ({e}) — has the search_log table been created?")
+            st.caption(
+                f"usage stats unavailable ({e}) — has the search_log table been created?"
+            )
+
+    st.markdown("---")
+    st.markdown("### Frequent queries")
+    try:
+        top_queries = db.get_top_queries(limit=15)
+        for tq in top_queries:
+            label = tq["query"][:40] + ("..." if len(tq["query"]) > 40 else "")
+            if st.button(
+                f"{label} ({tq['count']}x)",
+                key=f"topq_{hash(tq['query'])}",
+                use_container_width=True,
+            ):
+                st.session_state.pending_query = tq["query"]
+                st.rerun()
+    except Exception as e:
+        st.caption(f"frequent queries unavailable ({e})")
 
 # ---------- Main chat area ----------
+if "cat_state" not in st.session_state:
+    st.session_state.cat_state = ("idle", "")
+
+with st.container(key="cat_bar"):
+    cat_slot = st.empty()
+
+cat_slot.markdown(
+    cat_html(*st.session_state.cat_state), unsafe_allow_html=True
+)
 st.markdown("## Aadsia")
 if st.session_state.show_subtitle:
     st.caption("groq · supabase · tavily — verified web-grounded answers")
@@ -432,7 +562,7 @@ for i, msg in enumerate(history):
             f'<div class="role-label {role}">{role}<span class="time">{ts}</span></div>',
             unsafe_allow_html=True,
         )
-        st.write(msg["content"])
+        st.write(msg["content"].replace("$", "\\$"))
 
         if role == "assistant":
             extra = db.get_message_meta(msg)
@@ -440,11 +570,30 @@ for i, msg in enumerate(history):
             if extra:
                 status = extra.get("status")
                 sources = extra.get("sources")
-                provider_tag = f" · via {extra.get('provider')}" if extra.get("provider") else ""
+                provider_tag = (
+                    f" · via {extra.get('provider')}"
+                    if extra.get("provider")
+                    else ""
+                )
+
+                m = extra.get("match")
+                mt = (
+                    f" · {m['matched']} of {m['total']} facts matched"
+                    if m
+                    else ""
+                )
+
                 if status == "VERIFIED" and sources:
-                    st.markdown(f'<div class="status-verified">VERIFIED · {len(sources)} sources{provider_tag}</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="status-verified">VERIFIED · {len(sources)} sources{mt}{provider_tag}</div>',
+                        unsafe_allow_html=True,
+                    )
                 elif status == "LIMITED" and sources:
-                    st.markdown(f'<div class="status-limited">LIMITED · {len(sources)} source, low confidence{provider_tag}</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="status-limited">LIMITED · {len(sources)} sources{mt}{provider_tag}</div>',
+                        unsafe_allow_html=True,
+                    )
+
                 if sources:
                     with st.expander(f"see sources · {len(sources)}"):
                         lines = "".join(
@@ -452,20 +601,86 @@ for i, msg in enumerate(history):
                             f'<a href="{_html_escape(s["url"])}" target="_blank">{_html_escape(s["url"])}</a></div>'
                             for s in sources
                         )
-                        st.markdown(f'<div class="sources-panel">{lines}</div>', unsafe_allow_html=True)
+                        st.markdown(
+                            f'<div class="sources-panel">{lines}</div>',
+                            unsafe_allow_html=True,
+                        )
 
-            model_for_badge = extra["model"] if extra and extra.get("model") else st.session_state.selected_model
-            model_label = f"⚡ groq/{model_for_badge}" if st.session_state.show_full_model_name else "⚡"
-            st.markdown(f'<span class="model-badge" title="groq/{model_for_badge}">{model_label}</span>', unsafe_allow_html=True)
+                # debug_payload: only present on LIMITED / trimmed-retry /
+                # low-match-ratio messages (Option C) — shows the raw
+                # decision trail (classifier, provider, untrimmed snippets,
+                # trim/retry flag, match ratio) for exactly the cases worth
+                # scrutinizing.
+                debug = extra.get("debug_payload")
+                if debug:
+                    with st.expander("🔍 debug: why this was flagged"):
+                        st.markdown(
+                            f'<span class="tavily-usage">classifier: {debug.get("classifier_result")}</span>',
+                            unsafe_allow_html=True,
+                        )
+                        st.markdown(
+                            f'<span class="tavily-usage">provider: {debug.get("provider")}</span>',
+                            unsafe_allow_html=True,
+                        )
+                        st.markdown(
+                            f'<span class="tavily-usage">trimmed_retry: {debug.get("trimmed_retry")}</span>',
+                            unsafe_allow_html=True,
+                        )
+                        st.markdown(
+                            f'<span class="tavily-usage">match: {debug.get("match")}</span>',
+                            unsafe_allow_html=True,
+                        )
+                        st.markdown(
+                            f'<span class="tavily-usage">model_found_nothing_useful: '
+                            f'{debug.get("model_found_nothing_useful")}</span>',
+                            unsafe_allow_html=True,
+                        )
+                        raw = debug.get("raw_snippets")
+                        if raw:
+                            st.markdown("**raw snippets (untrimmed):**")
+                            for r in raw:
+                                st.markdown(
+                                    f'<div class="src-line">→ {_html_escape(r.get("title",""))} — '
+                                    f'{_html_escape(r.get("content",""))}</div>',
+                                    unsafe_allow_html=True,
+                                )
 
-            safe_text = msg["content"].replace("\\", "\\\\").replace("`", "'").replace("\n", "\\n").replace('"', '\\"')
+            if not (extra and (extra.get("sources") or extra.get("error"))):
+                st.markdown(
+                    '<div class="status-none">from model knowledge · not verified against sources</div>',
+                    unsafe_allow_html=True,
+                )
+
+            model_for_badge = (
+                extra["model"]
+                if extra and extra.get("model")
+                else st.session_state.selected_model
+            )
+            model_label = (
+                f"⚡ groq/{model_for_badge}"
+                if st.session_state.show_full_model_name
+                else "⚡"
+            )
+            st.markdown(
+                f'<span class="model-badge" title="groq/{model_for_badge}">{model_label}</span>',
+                unsafe_allow_html=True,
+            )
+
+            safe_text = (
+                msg["content"]
+                .replace("\\", "\\\\")
+                .replace("`", "'")
+                .replace("\n", "\\n")
+                .replace('"', '\\"')
+            )
             html_escaped_content = (
                 msg["content"]
                 .replace("&", "&amp;")
                 .replace("<", "&lt;")
                 .replace(">", "&gt;")
             )
-            components.html(f"""
+            components.html(
+                f"""
                 <style>
                   body {{ margin: 0; }}
                   .copy-btn {{
@@ -503,9 +718,15 @@ for i, msg in enumerate(history):
                     setTimeout(function() {{ btn.innerText = "copy"; }}, 1500);
                   }});
                 </script>
-            """, height=32)
+            """,
+                height=32,
+            )
 
-if prompt := st.chat_input("Type a message..."):
+prompt = st.chat_input("Type a message...")
+if not prompt and st.session_state.get("pending_query"):
+    prompt = st.session_state.pop("pending_query")
+
+if prompt:
     if not history:
         db.update_session_name_from_first_message(session_id, prompt)
 
@@ -514,70 +735,256 @@ if prompt := st.chat_input("Type a message..."):
         st.write(prompt)
 
     full_history = db.get_session_messages(session_id)
-    api_messages = [{"role": m["role"], "content": m["content"]} for m in full_history]
+    api_messages = [
+        {"role": m["role"], "content": m["content"]}
+        for m in full_history[-10:]
+        if not (db.get_message_meta(m) or {}).get("error")
+    ]
 
     with st.chat_message("assistant"):
+        live = st.empty()
+        live.markdown(cat_html("idle", "thinking…"), unsafe_allow_html=True)
         search_results = None
         search_provider = None
+        classifier_result = None  # "YES"/"NO" only when the needs_search() classifier actually ran
         mode = st.session_state.get("web_search_mode", "Auto")
         provider_choice = _PROVIDER_MODE_MAP.get(
             st.session_state.get("search_provider_mode", "Auto"), "auto"
         )
 
         should_search = False
+        search_attempted = False
         if mode == "Always":
             should_search = True
         elif mode == "Off":
             should_search = False
         elif provider_choice != "auto":
-            # A specific provider was forced (Exa/Tavily/YouTube only) — that's
-            # itself a clear signal the user wants a search this turn, so skip
-            # the flaky needs_search() classifier entirely and just search.
             should_search = True
         elif youtube.is_youtube_intent(prompt):
-            # Deterministic keyword check (views/trending/subscribers/@handle)
-            # instead of the LLM classifier — observed the classifier give 3
-            # different yes/no answers for the identical query seconds apart,
-            # and a "no" here means the model free-associates exact view
-            # counts and titles from nothing, which is the worst place for
-            # that classifier's flakiness to bite.
             should_search = True
-        elif any(kw in prompt.lower() for kw in ["today", "this week", "this month", "latest", "current", "right now", "breaking"]):
+        elif any(
+            kw in prompt.lower()
+            for kw in [
+                "today",
+                "this week",
+                "this month",
+                "latest",
+                "current",
+                "right now",
+                "breaking",
+            ]
+        ):
             should_search = True
         else:
             with st.spinner("Checking if this needs live data..."):
                 should_search = llm.needs_search(prompt)
+                classifier_result = "YES" if should_search else "NO"
 
-        search_attempted = False
         if provider_choice == "code_kb":
-            with st.spinner("Searching code knowledge base..."):
-                try:
-                    kb_result = kb_search.ask_kb(prompt)
-                    reply = kb_result["answer"]
-                    kb_sources = [
-                        {"title": f"{c['repo']}/{c['file']}", "url": ""}
-                        for c in kb_result["chunks"]
-                    ]
-                    result = {
-                        "text": reply,
-                        "sources": kb_sources if kb_sources else None,
-                        "status": "VERIFIED" if kb_sources else "LIMITED",
-                        "model": "openai/gpt-oss-20b",
-                    }
-                    search_provider = "Code KB"
-                    st.session_state.search_usage_count += 1
-                except Exception as e:
-                    reply = f"⚠️ Error calling Code KB: {e}"
-                    result = {"text": reply, "sources": None, "status": "NONE", "model": st.session_state.selected_model}
-                    search_provider = None
+            if kb_search is None:
+                reply = (
+                    "⚠️ Code KB is unavailable because the knowledge-base dependencies "
+                    "are not installed in this environment."
+                )
+                result = {
+                    "text": reply,
+                    "sources": None,
+                    "status": "NONE",
+                    "model": st.session_state.selected_model,
+                    "error": True,
+                }
+                search_provider = None
+            else:
+                live.markdown(cat_html("search", "searching code…"), unsafe_allow_html=True)
+                with st.spinner("Searching code knowledge base..."):
+                    try:
+                        kb_result = kb_search.ask_kb(prompt)
+                        reply = kb_result["answer"]
+                        chunks = kb_result.get("chunks", [])
+                        with st.expander("🔍 Debug: KB retrieval scores", expanded=True):
+                            if not chunks:
+                                st.write("No chunks retrieved.")
+                            else:
+                                for c in chunks:
+                                    st.write(f"**{c['repo']}/{c['file']}** (L{c.get('line_range', '?')}) — similarity: `{c['relevance_score']:.4f}`")
+
+                        # Use the top retrieval similarity score, not just chunk
+                        # presence, to decide whether the KB actually found
+                        # something relevant — a low-similarity chunk is often
+                        # noise the vector search returned anyway.
+                        top_score = max(
+                            (c["relevance_score"] for c in chunks), default=0.0
+                        )
+
+                        if not chunks or top_score < 0.5:
+                            result = {
+                                "text": reply,
+                                "sources": None,
+                                "status": "LIMITED",
+                                "model": st.session_state.selected_model,
+                            }
+                        else:
+                            # Even when a strong-scoring chunk came back, Groq's
+                            # own answer can signal it wasn't actually able to
+                            # ground the reply in it (e.g. it asks the user to
+                            # point it to the right file). Catch that before
+                            # calling it VERIFIED.
+                            couldnt_ground = any(
+                                phrase in reply.lower()
+                                for phrase in [
+                                    "couldn't locate",
+                                    "could not locate",
+                                    "can't quote",
+                                    "cannot quote",
+                                    "if you can point me",
+                                ]
+                            )
+                            kb_sources = [
+                                {"title": f"{c['repo']}/{c['file']}", "url": ""}
+                                for c in chunks
+                            ]
+                            result = {
+                                "text": reply,
+                                "sources": kb_sources if not couldnt_ground else None,
+                                "status": "LIMITED" if couldnt_ground else "VERIFIED",
+                                "model": "openai/gpt-oss-20b",
+                            }
+
+                        search_provider = "Code KB"
+                        st.session_state.search_usage_count += 1
+                    except Exception as e:
+                        reply = f"⚠️ Error calling Code KB: {e}"
+                        result = {
+                            "text": reply,
+                            "sources": None,
+                            "status": "NONE",
+                            "model": st.session_state.selected_model,
+                            "error": True,
+                        }
+                        search_provider = None
+        elif provider_choice == "sql_imdb":
+            if sql_search is None:
+                reply = (
+                    "⚠️ SQL / IMDb is unavailable because the SQL agent "
+                    "dependencies are not installed in this environment."
+                )
+                result = {
+                    "text": reply,
+                    "sources": None,
+                    "status": "NONE",
+                    "model": st.session_state.selected_model,
+                    "error": True,
+                }
+                search_provider = None
+            else:
+                live.markdown(cat_html("search", "querying imdb…"), unsafe_allow_html=True)
+                with st.spinner("Running SQL agent..."):
+                    try:
+                        sql_result = sql_search.ask_sql(prompt)
+                        reply = sql_result["answer"]
+                        tool_calls = sql_result.get("tool_calls_used", [])
+
+                        sql_sources = (
+                            [{"title": t, "url": ""} for t in tool_calls]
+                            if tool_calls else None
+                        )
+                        result = {
+                            "text": reply,
+                            "sources": sql_sources,
+                            "status": sql_result["status_hint"],
+                            "model": "openai/gpt-oss-120b",
+                        }
+                        search_provider = "SQL / IMDb"
+                        st.session_state.search_usage_count += 1
+                    except Exception as e:
+                        reply = f"⚠️ Error calling SQL agent: {e}"
+                        result = {
+                            "text": reply,
+                            "sources": None,
+                            "status": "NONE",
+                            "model": st.session_state.selected_model,
+                            "error": True,
+                        }
+                        search_provider = None
+        elif provider_choice == "project_docs":
+            if doc_search is None:
+                reply = "⚠️ Project Docs is unavailable — dependencies not installed."
+                result = {
+                    "text": reply,
+                    "sources": None,
+                    "status": "NONE",
+                    "model": st.session_state.selected_model,
+                    "error": True,
+                }
+                search_provider = None
+            else:
+                live.markdown(cat_html("search", "searching docs…"), unsafe_allow_html=True)
+                with st.spinner("Searching project documents..."):
+                    try:
+                        doc_result = doc_search.ask_doc(prompt)
+                        reply = doc_result["answer"]
+                        chunks = doc_result.get("chunks", [])
+
+                        top_score = max(
+                            (c["relevance_score"] for c in chunks), default=0.0
+                        )
+
+                        if not chunks or top_score < 0.5:
+                            result = {
+                                "text": reply,
+                                "sources": None,
+                                "status": "LIMITED",
+                                "model": st.session_state.selected_model,
+                            }
+                        else:
+                            doc_sources = [
+                                {"title": f"{c['project']}/{c['file']}", "url": ""}
+                                for c in chunks
+                            ]
+                            result = {
+                                "text": reply,
+                                "sources": doc_sources,
+                                "status": "VERIFIED",
+                                "model": "openai/gpt-oss-20b",
+                            }
+
+                        search_provider = "Project Docs"
+                        st.session_state.search_usage_count += 1
+                    except Exception as e:
+                        reply = f"⚠️ Error calling Project Docs: {e}"
+                        result = {
+                            "text": reply,
+                            "sources": None,
+                            "status": "NONE",
+                            "model": st.session_state.selected_model,
+                            "error": True,
+                        }
+                        search_provider = None
         else:
             if should_search:
+                live.markdown(
+                    cat_html("search", "searching…"), unsafe_allow_html=True
+                )
                 with st.spinner("Searching the web..."):
                     search_attempted = True
-                    search_results, search_provider = search.search_web(prompt, provider=provider_choice)
+                    list_like = any(
+                        w in prompt.lower()
+                        for w in ["best", "top", "list", "ranking", "ranked"]
+                    )
+                    search_results, search_provider = search.search_web(
+                        prompt,
+                        provider=provider_choice,
+                        content_chars=1500 if list_like else None,
+                    )
                     st.session_state.search_usage_count += 1
                     if search_provider:
                         db.log_search_usage(search_provider)
+            live.markdown(
+                cat_html("check", "checking sources…")
+                if search_attempted
+                else cat_html("idle", "thinking…"),
+                unsafe_allow_html=True,
+            )
             with st.spinner("Thinking..."):
                 try:
                     result = llm.get_response(
@@ -589,11 +996,82 @@ if prompt := st.chat_input("Type a message..."):
                     reply = result["text"]
                 except Exception as e:
                     reply = f"⚠️ Error calling Groq API: {e}"
-                    result = {"text": reply, "sources": None, "status": "NONE", "model": st.session_state.selected_model}
-        st.write(reply)
+                    result = {
+                        "text": reply,
+                        "sources": None,
+                        "status": "NONE",
+                        "model": st.session_state.selected_model,
+                        "error": True,
+                    }
+        if result.get("error"):
+            st.session_state.cat_state = ("limited", "error, try again")
+        elif result["status"] == "VERIFIED":
+            m = result.get("match")
+            st.session_state.cat_state = (
+                "done",
+                f"verified · {m['matched']} of {m['total']} facts matched"
+                if m
+                else "verified",
+            )
+        elif result["status"] == "LIMITED":
+            st.session_state.cat_state = ("limited", "limited confidence")
+        else:
+            st.session_state.cat_state = ("idle", "")
+        live.empty()
+        st.write(reply.replace("$", "\\$"))
+
+    # --- debug_payload (Option C): only build/store it for the cases worth
+    # scrutinizing — LIMITED status, a trimmed/retried request, or a low
+    # fact-match ratio. Normal VERIFIED answers get no debug_payload at all,
+    # keeping Supabase rows light.
+    match = result.get("match")
+    low_match = (
+        match is not None
+        and match.get("total", 0) > 0
+        and (match["matched"] / match["total"]) < 0.75
+    )
+    padding = result.get("list_padding")
+    list_padded = (
+        padding is not None
+        and padding.get("total_items", 0) >= 5
+        and padding["suspicious"] / padding["total_items"] >= 0.25
+    )
+    should_store_debug = (
+        result.get("status") == "LIMITED"
+        or result.get("trimmed_retry")
+        or low_match
+        or list_padded
+        or result.get("items_removed")
+    )
+
+    debug_payload = None
+    if should_store_debug:
+        debug_payload = {
+            "classifier_result": classifier_result,
+            "provider": search_provider,
+            "raw_snippets": search_results,
+            "trimmed_retry": result.get("trimmed_retry", False),
+            "match": match,
+            "status": result.get("status"),
+            "model_found_nothing_useful": result.get(
+                "model_found_nothing_useful"
+            ),
+            "list_padding": padding,
+            "items_removed": result.get("items_removed", 0),
+        }
 
     db.save_message(
-        session_id, "assistant", reply,
-        meta={"status": result["status"], "sources": result["sources"], "model": result["model"], "provider": search_provider},
+        session_id,
+        "assistant",
+        reply,
+        meta={
+            "status": result["status"],
+            "sources": result["sources"],
+            "model": result["model"],
+            "provider": search_provider,
+            "error": result.get("error", False),
+            "match": result.get("match"),
+            "debug_payload": debug_payload,
+        },
     )
     st.rerun()

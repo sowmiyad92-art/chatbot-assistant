@@ -1,13 +1,18 @@
+import calendar
 import os
-from datetime import datetime, timezone, timedelta
-from groq import Groq
+import re
+import unicodedata
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
+from groq import Groq
 
 load_dotenv()
+
 
 def get_api_key():
     try:
         import streamlit as st
+
         if "GROQ_API_KEY" in st.secrets:
             return st.secrets["GROQ_API_KEY"]
     except Exception:
@@ -38,7 +43,9 @@ SYSTEM_PROMPT = (
 )
 
 
-CLASSIFIER_MODEL = "openai/gpt-oss-20b"  # cheapest/fastest — this call should cost almost nothing
+CLASSIFIER_MODEL = (
+    "openai/gpt-oss-20b"  # cheapest/fastest — this call should cost almost nothing
+)
 
 CLASSIFIER_PROMPT = (
     "You decide if a user question needs a live web search to answer well, or if "
@@ -72,7 +79,8 @@ def needs_search(query):
                 {"role": "user", "content": query},
             ],
             temperature=0,
-            max_tokens=3,
+            max_tokens=50,
+            reasoning_effort="low",
         )
         answer = completion.choices[0].message.content.strip().upper()
         return answer.startswith("YES")
@@ -92,9 +100,6 @@ def _build_search_context(search_results, max_chars=None):
     return "\n".join(lines)
 
 
-import calendar
-
-
 def _timeframe_range(query, today):
     q = query.lower()
     if "today" in q:
@@ -107,18 +112,26 @@ def _timeframe_range(query, today):
         return "next month", start, end
     if "this month" in q:
         start = today.replace(day=1)
-        end = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+        end = today.replace(
+            day=calendar.monthrange(today.year, today.month)[1]
+        )
         return "this month", start, end
     if "this week" in q:
         start = today - timedelta(days=today.weekday())
         end = start + timedelta(days=6)
         return "this week", start, end
     if "this year" in q:
-        return "this year", today.replace(month=1, day=1), today.replace(month=12, day=31)
+        return (
+            "this year",
+            today.replace(month=1, day=1),
+            today.replace(month=12, day=31),
+        )
     return None
 
 
-def _build_system_content(search_results, max_chars=None, search_attempted=False, latest_query=None):
+def _build_system_content(
+    search_results, max_chars=None, search_attempted=False, latest_query=None
+):
     system_content = SYSTEM_PROMPT
     if search_results:
         today = datetime.now(timezone.utc).date()
@@ -154,20 +167,40 @@ def _build_system_content(search_results, max_chars=None, search_attempted=False
             "below your answer, so present each result directly and naturally "
             "(e.g. 'Here's a video: [title] by [channel/author]') as if you are "
             "handing them the resource, not suggesting they go look it up. "
+            "Only report results for the exact team, person, or title the user named; "
+            "if a source is about a different team or event, do not use it. "
             "CRITICAL: only reference titles, names, view counts, and facts that "
-            "literally appear in the search results below — never invent, "
+            "literally appear in the search results below — "
+            "Search results may contain non-English text (Chinese, Korean, "
+            "etc.) — this is normal and expected. Read and extract facts "
+            "from them the same as English text: dates, titles, and "
+            "announcements in Chinese or Korean are just as valid a source "
+            "as English ones. Do not skip or discount a result just because "
+            "it's not in English — translate the relevant fact into your "
+            "answer. "
+            "never invent, "
             "paraphrase-into-a-new-title, or guess a plausible-sounding "
             "alternative that isn't actually there. If the search results don't "
             "contain something the user asked for, say so honestly instead of "
-            "making up a substitute. If a search result contains an exact "
+            "making up a substitute. "
+            "Before concluding a result doesn't contain what's asked, read "
+            "the ENTIRE title and content of each result carefully — the "
+            "answer is often in the title itself (e.g. a listicle title "
+            "naming a few examples), not spelled out sentence by sentence. "
+            "If a result's title or content mentions specific names, titles, "
+            "or items relevant to the question, extract and use them even "
+            "if the rest of that result's content is generic or repetitive. "
+            "Only say nothing was found if you have genuinely checked every "
+            "result's title and content and none of them name anything "
+            "relevant. "
+            "If a search result contains an exact "
             "number (view count, subscriber count, date, etc.), state that "
             "exact number directly — never say it's 'high', 'unable to "
             "determine', or 'not mentioned' when the number is actually "
             "present in the result. "
-            "present the result directly and confidently — do not add hedges "
-            "like 'I don't have information about their most-watched videos "
-            "in general' or similar disclaimers when the results already "
-            "answer the question. If a result's content includes text like "
+            "present the result directly and confidently, but state once, briefly, "
+            "that the ranking is among the videos retrieved, not the channel's "
+            "full catalog. If a result's content includes text like "
             "'Rank N of M by view count', that ranking was already computed "
             "and verified before reaching you — present it as-is, with "
             "confidence, and do not undercut it with unnecessary caveats. "
@@ -191,7 +224,8 @@ def _build_system_content(search_results, max_chars=None, search_attempted=False
             "verifiable items, list only the ones truly supported and say "
             "plainly that fewer were found than requested. NEVER invent an "
             "additional item — a title, cast member, date, or anything else — "
-            "just to pad the list up to the requested count:\n\n" + _build_search_context(search_results, max_chars)
+            "just to pad the list up to the requested count:\n\n"
+            + _build_search_context(search_results, max_chars)
         )
     elif search_attempted:
         system_content += (
@@ -221,25 +255,124 @@ def _build_system_content(search_results, max_chars=None, search_attempted=False
     return system_content
 
 
-def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_attempted=False):
-    """
-    messages: list of {"role": "user"/"assistant", "content": "..."}
-    search_results: optional list of {"title","url","content"} from search.search_web
-    search_attempted: pass True whenever search_web() was actually called this
-        turn, regardless of whether it returned results.
+_STOP = {
+    "Here",
+    "The",
+    "This",
+    "That",
+    "Their",
+    "There",
+    "These",
+    "Those",
+    "However",
+    "Note",
+    "Sorry",
+}
 
-    Returns a dict:
-        {
-            "text": str,
-            "sources": list | None,
-            "status": "VERIFIED" | "LIMITED" | "NONE",
-            "model": str,
-        }
-    Status starts as a source-count heuristic, then gets downgraded if the
-    model's own answer signals it couldn't actually use the sources it was
-    given (e.g. irrelevant/wrong-language results) — see
-    `model_found_nothing_useful` below.
+
+def _norm(s):
+    for ch in "\u2010\u2011\u2012\u2013\u2014":
+        s = s.replace(ch, "-")
+    return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+
+
+def _match_facts(text, search_results, latest_query=None):
+    """Check numbers and names in the answer against the source text.
+    Returns {"matched": n, "total": m} or None if there is nothing to check.
     """
+    if not search_results:
+        return None
+    today = datetime.now(timezone.utc).date()
+    text = _norm(text).replace(today.isoformat(), "")
+
+    tf = _timeframe_range(latest_query, today) if latest_query else None
+    if tf:
+        for d in (tf[1], tf[2]):
+            text = text.replace(d.isoformat(), "")
+
+    facts = set()
+    for m in re.findall(r"\d{4}-\d{2}-\d{2}", text):
+        facts.add(m)
+    for m in re.findall(r"\b\d[\d,]*(?:\.\d+)?%?", text):
+        n = m.replace(",", "")
+        if len(n.rstrip("%")) >= 3 or "%" in n or "." in n:
+            facts.add(n)
+    for n, u in re.findall(
+        r"\b(\d{1,2})\s+(years?|days?|episodes?|seasons?|weeks?|months?)\b", text
+    ):
+        facts.add(f"{n} {u.rstrip('s')}")
+    for m in re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b", text):
+        words = m.split()
+        while words and words[0] in _STOP:
+            words.pop(0)
+        if len(words) >= 2:
+            facts.add(" ".join(words).lower())
+    if not facts:
+        return None
+    src = (
+        _norm(" ".join(f"{r['title']} {r['content']}" for r in search_results))
+        .lower()
+        .replace(",", "")
+    )
+    matched = sum(1 for f in facts if re.search(r"(?<![a-z0-9])" + re.escape(f) + r"(?![a-z0-9])", src))
+    return {"matched": matched, "total": len(facts)}
+
+
+_QSTOP = {
+    "search",
+    "youtube",
+    "video",
+    "videos",
+    "show",
+    "find",
+    "give",
+    "tell",
+    "about",
+    "what",
+    "which",
+    "best",
+    "top",
+    "most",
+    "that",
+    "this",
+    "with",
+    "from",
+    "your",
+    "their",
+    "how",
+    "make",
+    "latest",
+    "today",
+    "week",
+    "month",
+    "viewed",
+    "watched",
+    "views",
+}
+
+
+def _relevant(query, search_results):
+    if not query or not search_results:
+        return True
+    words = {
+        w
+        for w in re.findall(r"[a-z]{4,}", _norm(query).lower())
+        if w not in _QSTOP
+    }
+    if not words:
+        return True
+    src = _norm(
+        " ".join(f"{r['title']} {r['content']}" for r in search_results)
+    ).lower()
+    return sum(1 for w in words if w in src) / len(words) >= 0.5
+
+
+def get_response(
+    messages,
+    model=DEFAULT_MODEL,
+    search_results=None,
+    search_attempted=False,
+):
     latest_query = None
     for m in reversed(messages):
         if m.get("role") == "user":
@@ -247,7 +380,9 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
             break
 
     system_content = _build_system_content(
-        search_results, search_attempted=search_attempted, latest_query=latest_query
+        search_results,
+        search_attempted=search_attempted,
+        latest_query=latest_query,
     )
     chat_messages = [{"role": "system", "content": system_content}] + messages
 
@@ -258,27 +393,39 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
             model=model,
             messages=chat_messages,
             temperature=temperature,
-            max_tokens=900,
+            max_tokens=2000,
+            reasoning_effort="low",
             frequency_penalty=0.4,
         )
     except Exception as e:
         err = str(e)
         if "Tool choice is none, but model called a tool" in err:
             return {
-                "text": "I can't call tools directly this way — try rephrasing your question naturally, e.g. 'Find the top lofi music videos on YouTube' instead of 'use your API tool to...'.",
+                "text": (
+                    "I don't have access to any customer data, so I can't "
+                    "answer that. I can help with general knowledge and web questions."
+                ),
                 "sources": None,
                 "status": "NONE",
                 "model": model,
             }
-        too_large = search_results and (
-            "413" in err or "rate_limit_exceeded" in err
-            or "tokens per minute" in err.lower() or "request too large" in err.lower()
+        too_large = (
+            "413" in err
+            or "rate_limit_exceeded" in err
+            or "tokens per minute" in err.lower()
+            or "request too large" in err.lower()
         )
         if not too_large:
             raise
-        print(f"[llm.py] request too large, retrying with trimmed context: {err[:200]}")
-        trimmed_system = _build_system_content(search_results, max_chars=150, latest_query=latest_query)
-        chat_messages = [{"role": "system", "content": trimmed_system}] + messages
+        print(
+            f"[llm.py] request too large, retrying with trimmed context: {err[:200]}"
+        )
+        trimmed_system = _build_system_content(
+            search_results, max_chars=150, latest_query=latest_query
+        )
+        chat_messages = [
+            {"role": "system", "content": trimmed_system}
+        ] + messages[-4:]
         try:
             completion = client.chat.completions.create(
                 model=model,
@@ -288,11 +435,21 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
                 frequency_penalty=0.4,
             )
         except Exception as retry_err:
-            print(f"[llm.py] trimmed retry also failed: {str(retry_err)[:200]}")
+            print(
+                f"[llm.py] trimmed retry also failed: {str(retry_err)[:200]}"
+            )
             return {
-                "text": "I hit an API limit and couldn't recover even after trimming context — please try again with a narrower question.",
+                "text": (
+                    "Groq daily token limit reached. Try again later or switch model."
+                    if (
+                        "per day" in str(retry_err).lower()
+                        or "tpd" in str(retry_err).lower()
+                    )
+                    else "Groq per-minute limit hit. Wait a minute and retry."
+                ),
                 "sources": search_results,
                 "status": "LIMITED",
+                "error": True,
                 "model": model,
             }
 
@@ -310,16 +467,31 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
         "i'm not able to tell you",
         "i'm not finding any",
         "no fresh search results",
+        "i'm sorry",
+        "do not contain",
+        "do not include",
+        "does not contain",
+        "none of the search results",
+        "not present in the data",
     ]
     model_found_nothing_useful = search_results and any(
-        phrase in text.lower() for phrase in _NO_USEFUL_DATA_PHRASES
+        phrase in text.lower().replace("\u2019", "'")
+        for phrase in _NO_USEFUL_DATA_PHRASES
     )
+
+    match = _match_facts(text, search_results, latest_query)
+    ratio_ok = (
+        match is not None
+        and match["total"] >= 2
+        and match["matched"] / match["total"] >= 0.75
+    )
+    ratio_ok = ratio_ok and _relevant(latest_query, search_results)
 
     if not search_results:
         status = "NONE"
     elif model_found_nothing_useful:
         status = "LIMITED"
-    elif len(search_results) >= 2:
+    elif len(search_results) >= 2 and ratio_ok:
         status = "VERIFIED"
     else:
         status = "LIMITED"
@@ -329,4 +501,5 @@ def get_response(messages, model=DEFAULT_MODEL, search_results=None, search_atte
         "sources": search_results,
         "status": status,
         "model": model,
+        "match": match,
     }

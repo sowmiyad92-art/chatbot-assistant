@@ -188,7 +188,6 @@ def get_active_scheduled_queries():
     res = supabase.table("scheduled_queries").select("*").eq("active", True).execute()
     return res.data
 
-
 def save_digest_run(scheduled_query_id, payload, delivered=False, telegram_message_id=None):
     """Log one full digest run (all sections in payload jsonb)."""
     result = supabase.table("digest_runs").insert({
@@ -198,6 +197,20 @@ def save_digest_run(scheduled_query_id, payload, delivered=False, telegram_messa
         "telegram_message_id": telegram_message_id,
     }).execute()
     return result.data[0]["id"]
+
+
+def get_last_digest_run():
+    """Fetch the most recent digest run's payload, for delta comparison."""
+    result = (
+        supabase.table("digest_runs")
+        .select("payload, run_at")
+        .order("run_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if result.data:
+        return result.data[0]["payload"]
+    return None
 
 
 def update_last_run(scheduled_query_id, status="success"):
@@ -219,3 +232,26 @@ def get_yesterday_payload(scheduled_query_id):
         .execute()
     )
     return res.data[0]["payload"] if res.data else None
+    
+def get_top_queries(limit=15):
+    """
+    Returns the most frequently asked user queries across all sessions,
+    for the sidebar quick-query panel. Fetched and aggregated in Python —
+    fine at personal-app volume. If messages grows large, swap for a
+    Postgres view/RPC instead (same tradeoff noted in get_search_usage_stats).
+    """
+    rows = (
+        supabase.table("messages")
+        .select("content")
+        .eq("role", "user")
+        .execute()
+        .data
+    )
+    counts = {}
+    for row in rows:
+        text = row["content"].strip()
+        if text:
+            counts[text] = counts.get(text, 0) + 1
+
+    top = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:limit]
+    return [{"query": q, "count": c} for q, c in top]

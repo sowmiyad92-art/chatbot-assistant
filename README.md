@@ -1,57 +1,64 @@
-# Groq Chat Assistant
+# Aadsia
 
-A multi-turn chatbot built with Streamlit and Groq's LLM API, with persistent
-chat memory and support for multiple named conversation sessions — similar to
-ChatGPT's sidebar, but self-built end to end.
+A personal AI assistant built with Streamlit and Groq. Every web-grounded answer shows its sources and a fact-match badge, so you can see how much of the answer the sources actually support.
 
-**Live demo:** _add your Streamlit Cloud URL here after deploying_
 
 ## Features
 
-- Multi-turn conversation with full context memory per session
-- Multiple named chat sessions (create, switch, delete)
-- Auto-naming of sessions from the first message
-- Model picker — switch between `llama-3.1-8b-instant` (fast) and
-  `llama-3.3-70b-versatile` (stronger reasoning)
-- Optional live web search (via Tavily) toggle — grounds answers in current
-  information instead of relying solely on the model's training cutoff
-- Custom dark UI design (not a default Streamlit theme)
-- SQLite-backed persistence
+- **Multi-turn chat** with named sessions (create, switch, delete), stored in Supabase
+- **Model picker:** `openai/gpt-oss-20b` (fast) or `openai/gpt-oss-120b` (stronger)
+- **Web search modes:** Auto (a cheap classifier decides per question), Always, or Off
+- **Search providers:** Exa, Tavily, and the YouTube API, with automatic routing and fallback (or force one provider)
+- **Region-aware search:** Chinese, Korean, and Arabic entertainment queries are scoped to regional trade press
+- **Sources panel** under every searched answer
+- **Fact-match badge:** numbers, dates, and names in the answer are checked against the source text
+  - `VERIFIED` means at least 2 sources and 60% or more of the checkable facts matched
+  - `LIMITED` means weak sources, too few checkable facts, or a low match
+- **Animated cat-robot mascot** that reacts while working: searching, checking sources, verified, limited
+- **Sidebar tools:** frequent queries, search usage stats (per provider, per month), copy button on answers
+- **Custom dark UI** with amber and green accents and a soft clay look
 
-## Tech stack
+## Stack
 
-- **Frontend:** Streamlit
-- **LLM:** Groq API (Llama 3.1 / 3.3 models)
-- **Storage:** Supabase (hosted Postgres) — persists permanently across redeploys
-
-## Running locally
-
-```bash
-pip install -r requirements.txt
-```
-
-Create a `.env` file (see `.env.example`) with:
-```
-GROQ_API_KEY=your_key_here
-DATABASE_URL=your_supabase_connection_string_here
-```
-
-Then run:
-```bash
-streamlit run app.py
-```
-
-## Notes
-
-Chat history is stored in a hosted Postgres database (Supabase), so it persists
-permanently — unlike a local SQLite file, it survives redeploys and restarts
-on Streamlit Community Cloud.
+Streamlit, Groq API, Supabase (Postgres), Exa, Tavily, YouTube Data API.
 
 ## Project structure
 
 | File | Purpose |
-|------|---------|
-| `app.py` | Streamlit UI, session state, page layout |
-| `db.py` | Supabase (Postgres) helpers — sessions and messages |
-| `llm.py` | Groq API wrapper, system prompt, model config |
-| `requirements.txt` | Python dependencies |
+|---|---|
+| `App.py` | Streamlit UI, theme CSS, mascot, chat flow |
+| `llm.py` | Groq calls, search-need classifier, prompt building, fact-match check |
+| `search.py` | Exa / Tavily / YouTube routing with fallback |
+| `youtube.py` | YouTube API search and intent detection |
+| `db.py` | Supabase access (sessions, messages, search log) |
+
+## Setup
+
+1. Clone the repo and install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Create the Supabase tables `sessions`, `messages`, and `search_log`. The SQL is in the docstring of `init_db()` in `db.py`.
+3. Add your keys to `.streamlit/secrets.toml` locally, or to the app's Secrets on Streamlit Cloud:
+   ```toml
+   GROQ_API_KEY = "..."
+   SUPABASE_URL = "..."
+   SUPABASE_KEY = "..."
+   EXA_API_KEY = "..."
+   TAVILY_API_KEY = "..."
+   # plus the YouTube API key (see youtube.py for the variable name)
+   ```
+4. Run the app:
+   ```bash
+   streamlit run App.py
+   ```
+
+## Known limitations
+
+- The fact-match badge is a heuristic. It checks numbers of 3 or more digits, percentages, decimals, ISO dates, and multi-word names. It does not check single words or 1-2 digit numbers, and it can miss paraphrased facts.
+- It verifies an answer against the retrieved sources, not against whether newer information exists elsewhere.
+- Reasoning models spend tokens before answering, so token limits are set higher than a typical chat app.
+
+## Roadmap
+
+- Per-claim source trails and a conflict view when sources disagree (designed, not built)
