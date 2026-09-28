@@ -20,7 +20,7 @@ from langchain_community.utilities import SQLDatabase
 # CONSTANTS
 # ============================================================================
 
-DEFAULT_MIN_VOTES = 2000
+DEFAULT_MIN_VOTES = 10000
 DATASET_NOTE = "\n\n_Results come from the filtered IMDb dataset (2000–2024, ~30k titles), not all of IMDb._"
 
 # ============================================================================
