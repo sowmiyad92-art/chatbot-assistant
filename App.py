@@ -15,6 +15,7 @@ try:
     import sql_search
 except ModuleNotFoundError:
     sql_search = None
+    st.error(f"SQL_SEARCH IMPORT ERROR: {e}")
 
 try:
     import doc_search
