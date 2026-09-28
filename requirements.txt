@@ -17,4 +17,4 @@ langchain-groq
 langgraph
 langchain-community
 pandas
-SQLite
+
