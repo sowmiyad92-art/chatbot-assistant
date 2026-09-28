@@ -17,6 +17,13 @@ from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 from langchain_community.utilities import SQLDatabase
 
 # ============================================================================
+# CONSTANTS
+# ============================================================================
+
+DEFAULT_MIN_VOTES = 2000
+DATASET_NOTE = "\n\n_Results come from the filtered IMDb dataset (2000–2024, ~30k titles), not all of IMDb._"
+
+# ============================================================================
 # LAZY-LOADED SINGLETONS (mirrors kb_search.py's pattern)
 # ============================================================================
 
@@ -45,12 +52,17 @@ class ImdbQuery(BaseModel):
 
 
 def imdb_lookup(genre: Optional[str] = None, min_votes: Optional[int] = None,
-                 year_from: Optional[int] = None, year_to: Optional[int] = None) -> str:
+                year_from: Optional[int] = None, year_to: Optional[int] = None) -> str:
     df = get_imdb_df().copy()
     if genre:
         df = df[df["genres"].str.contains(genre, case=False, na=False)]
-    if min_votes:
-        df = df[df["numVotes"] >= min_votes]
+    
+    floor_applied = False
+    if min_votes is None:
+        min_votes = DEFAULT_MIN_VOTES
+        floor_applied = True
+    df = df[df["numVotes"] >= min_votes]
+
     if year_from:
         df = df[df["startYear"] >= year_from]
     if year_to:
@@ -62,7 +74,10 @@ def imdb_lookup(genre: Optional[str] = None, min_votes: Optional[int] = None,
         f"{r['primaryTitle']} ({r['startYear']}) - Rating {r['averageRating']}, Votes {r['numVotes']}"
         for _, r in df.iterrows()
     ]
-    return "\n".join(lines)
+    out = "\n".join(lines)
+    if floor_applied:
+        out += f"\n(Note: minimum {DEFAULT_MIN_VOTES:,} votes applied by default.)"
+    return out
 
 
 def get_imdb_tool():
@@ -78,7 +93,12 @@ def get_imdb_tool():
 # SQL AGENT SETUP
 # ============================================================================
 
-SQL_SYSTEM_INSTRUCTION = "You are a movie research assistant with access to an IMDb dataset and SQL database."
+SQL_SYSTEM_INSTRUCTION = (
+    "You are a movie research assistant with access to an IMDb dataset and SQL database. "
+    f"When ranking or listing movies by rating, only include titles with at least "
+    f"{DEFAULT_MIN_VOTES} votes unless the user asks for a different threshold, "
+    "and say which threshold you used."
+)
 
 
 def get_sql_agent_cached():
@@ -106,6 +126,16 @@ def get_sql_agent_cached():
 # ============================================================================
 # MAIN ENTRY POINT
 # ============================================================================
+
+def _describe_call(call: dict) -> str:
+    name = call["name"]
+    args = call.get("args") or {}
+    if name in ("sql_db_query", "sql_db_query_checker"):
+        detail = args.get("query", "")
+    else:
+        detail = ", ".join(f"{k}={v}" for k, v in args.items() if v is not None)
+    return f"{name}: {detail}" if detail else name
+
 
 def ask_sql(query: str) -> dict:
     """
@@ -137,7 +167,7 @@ def ask_sql(query: str) -> dict:
             if last_msg.type == "ai":
                 calls = getattr(last_msg, "tool_calls", None)
                 if calls:
-                    tool_calls_used.extend(c["name"] for c in calls)
+                    tool_calls_used.extend(_describe_call(c) for c in calls)
                 else:
                     final_content = last_msg.content
     except Exception as e:
@@ -150,8 +180,12 @@ def ask_sql(query: str) -> dict:
 
     status_hint = "VERIFIED" if tool_calls_used else "LIMITED"
 
+    answer = final_content or "No answer generated."
+    if tool_calls_used:
+        answer += DATASET_NOTE
+
     return {
-        "answer": final_content or "No answer generated.",
+        "answer": answer,
         "tool_calls_used": tool_calls_used,
         "status_hint": status_hint,
         "metadata": {"num_tool_calls": len(tool_calls_used)},
