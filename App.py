@@ -351,7 +351,12 @@ section[data-testid="stSidebar"] .stButton button:hover {
     background-color: rgba(255,255,255,0.03) !important;
 }
 
-.cat-wrap { text-align: center; padding: 4px 0 8px; }.cat-wrap .lab { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim); margin-top: 2px; }.cat .earL, .cat .earR, .cat .eyes { transform-box: fill-box; }.cat .earL, .cat .earR { transform-origin: 50% 100%; transition: transform .3s ease-out; }.cat .eyes { transform-origin: center; }.cat.idle .eyes { animation: catbl 3s infinite; }.cat.search .eyes { animation: catsc .9s ease-in-out infinite alternate; }.cat.search .earL { animation: catpl .7s ease-in-out infinite alternate; }.cat.search .earR { animation: catpr .7s ease-in-out infinite alternate .35s; }.cat.check .wk { animation: catwh .6s ease-in-out infinite alternate; }.cat.check .wk:nth-child(2) { animation-delay: .1s; }.cat.check .wk:nth-child(3) { animation-delay: .2s; }.cat.check .wk:nth-child(4) { animation-delay: .3s; }.cat.check .wk:nth-child(5) { animation-delay: .4s; }.cat.check .wk:nth-child(6) { animation-delay: .5s; }.cat.done .earL { transform: rotate(-6deg); } .cat.done .earR { transform: rotate(6deg); }.cat.limited .earL { transform: rotate(-30deg); } .cat.limited .earR { transform: rotate(30deg); }@keyframes catbl { 0%,92%,100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }@keyframes catsc { from { transform: translateX(-5px); } to { transform: translateX(5px); } }@keyframes catpl { from { transform: rotate(-10deg); } to { transform: rotate(4deg); } }@keyframes catpr { from { transform: rotate(10deg); } to { transform: rotate(-4deg); } }@keyframes catwh { from { stroke: #f5a623; } to { stroke: #4ec9a0; } }
+.cat-wrap { text-align: center; padding: 4px 0 8px; }.cat-wrap .lab { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim); margin-top: 2px; }.cat .earL, .cat .earR, .cat .eyes { transform-box: fill-box; }.cat .earL, .cat .earR { transform-origin: 50% 100%; transition: transform .3s ease-out; }.cat .eyes { transform-origin: center; }.cat.idle .eyes { animation: catbl 3s infinite; }.cat.search .eyes { animation: catsc .9s ease-in-out infinite alternate; }.cat.search .earL { animation: catpl .7s ease-in-out infinite alternate; }.cat.search .earR { animation: catpr .7s ease-in-out infinite alternate .35s; }.cat.check .wk { animation: catwh .6s ease-in-out infinite alternate; }.cat.check .wk:nth-child(2) { animation-delay: .1s; }.cat.check .wk:nth-child(3) { animation-delay: .2s; }.cat.check .wk:nth-child(4) { animation-delay: .3s; }.cat.check .wk:nth-child(5) { animation-delay: .4s; }.cat.check .wk:nth-child(6) { animation-delay: .5s; }.cat.done .earL { transform: rotate(-6deg); }.cat.done .earR { transform: rotate(6deg); }.cat.limited .earL { transform: rotate(-30deg); }.cat.limited .earR { transform: rotate(30deg); }
+@keyframes catbl { 0%,92%,100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+@keyframes catsc { from { transform: translateX(-5px); } to { transform: translateX(5px); } }
+@keyframes catpl { from { transform: rotate(-10deg); } to { transform: rotate(4deg); } }
+@keyframes catpr { from { transform: rotate(10deg); } to { transform: rotate(-4deg); } }
+@keyframes catwh { from { stroke: #f5a623; } to { stroke: #4ec9a0; } }
 
 .cat-wrap svg.cat { width: 110px; height: 110px; }
 
@@ -427,13 +432,9 @@ with st.sidebar:
                     db.delete_session(s["id"])
                     remaining = db.get_sessions()
                     if remaining:
-                        st.session_state.current_session_id = remaining[0][
-                            "id"
-                        ]
+                        st.session_state.current_session_id = remaining[0]["id"]
                     else:
-                        st.session_state.current_session_id = (
-                            db.create_session("New chat")
-                        )
+                        st.session_state.current_session_id = db.create_session("New chat")
                     st.rerun()
 
     if len(sessions) > 5:
@@ -568,11 +569,11 @@ for i, msg in enumerate(history):
         )
         st.write(msg["content"].replace("$", "\\$"))
 
-                if role == "assistant":                    # 8 spaces
-            extra = db.get_message_meta(msg)       # 12 spaces
+        if role == "assistant":
+            extra = db.get_message_meta(msg)
 
-            if extra:                              # 12 spaces  <- must match the line above
-                status = extra.get("status")       # 16 spaces
+            if extra:
+                status = extra.get("status")
                 sources = extra.get("sources")
                 provider_tag = (
                     f" · via {extra.get('provider')}"
@@ -621,11 +622,6 @@ for i, msg in enumerate(history):
                             unsafe_allow_html=True,
                         )
 
-                # debug_payload: only present on LIMITED / trimmed-retry /
-                # low-match-ratio / relevance-unclear messages — shows the raw
-                # decision trail (classifier, provider, untrimmed snippets,
-                # trim/retry flag, match ratio) for exactly the cases worth
-                # scrutinizing.
                 debug = extra.get("debug_payload")
                 if debug:
                     with st.expander("🔍 debug: why this was flagged"):
@@ -765,7 +761,7 @@ if prompt:
         live.markdown(cat_html("idle", "thinking…"), unsafe_allow_html=True)
         search_results = None
         search_provider = None
-        classifier_result = None  # "YES"/"NO" only when the needs_search() classifier actually ran
+        classifier_result = None
         mode = st.session_state.get("web_search_mode", "Auto")
         provider_choice = _PROVIDER_MODE_MAP.get(
             st.session_state.get("search_provider_mode", "Auto"), "auto"
@@ -827,10 +823,6 @@ if prompt:
                                 for c in chunks:
                                     st.write(f"**{c['repo']}/{c['file']}** (L{c.get('line_range', '?')}) — similarity: `{c['relevance_score']:.4f}`")
 
-                        # Use the top retrieval similarity score, not just chunk
-                        # presence, to decide whether the KB actually found
-                        # something relevant — a low-similarity chunk is often
-                        # noise the vector search returned anyway.
                         top_score = max(
                             (c["relevance_score"] for c in chunks), default=0.0
                         )
@@ -843,11 +835,6 @@ if prompt:
                                 "model": st.session_state.selected_model,
                             }
                         else:
-                            # Even when a strong-scoring chunk came back, Groq's
-                            # own answer can signal it wasn't actually able to
-                            # ground the reply in it (e.g. it asks the user to
-                            # point it to the right file). Catch that before
-                            # calling it VERIFIED.
                             couldnt_ground = any(
                                 phrase in reply.lower()
                                 for phrase in [
@@ -1047,10 +1034,6 @@ if prompt:
         live.empty()
         st.write(reply.replace("$", "\\$"))
 
-    # --- debug_payload (Option C): only build/store it for the cases worth
-    # scrutinizing — LIMITED status, a trimmed/retried request, a low
-    # fact-match ratio, or unclear relevance. Normal VERIFIED answers get no
-    # debug_payload at all, keeping Supabase rows light.
     match = result.get("match")
     low_match = (
         match is not None
@@ -1082,9 +1065,7 @@ if prompt:
             "match": match,
             "status": result.get("status"),
             "status_reason": result.get("status_reason"),
-            "model_found_nothing_useful": result.get(
-                "model_found_nothing_useful"
-            ),
+            "model_found_nothing_useful": result.get("model_found_nothing_useful"),
             "list_padding": padding,
             "items_removed": result.get("items_removed", 0),
         }
