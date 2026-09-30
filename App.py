@@ -13,7 +13,7 @@ except ModuleNotFoundError:
 
 try:
     import sql_search
-except ModuleNotFoundError:
+except ModuleNotFoundError as e:
     sql_search = None
     st.error(f"SQL_SEARCH IMPORT ERROR: {e}")
 
@@ -106,6 +106,7 @@ st.markdown(
     --accent-assistant: #c9c9d0;
     --accent-verified: #4ec9a0;
     --accent-limited: #f5a623;
+    --accent-partial: #d9b45a;
     --border: #303038;
 }
 
@@ -307,7 +308,7 @@ div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
     margin: 2px 0;
 }
 
-.status-verified, .status-limited {
+.status-verified, .status-limited, .status-partial {
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
     font-weight: 500;
@@ -318,6 +319,8 @@ div[data-testid="stChatMessageContent"] { font-family: 'Inter', sans-serif; }
 .status-verified::before { content: "● "; }
 .status-limited { color: var(--accent-limited); }
 .status-limited::before { content: "● "; }
+.status-partial { color: var(--accent-partial); }
+.status-partial::before { content: "◐ "; }
 
 .sources-panel {
     background: var(--bg-panel);
@@ -584,9 +587,20 @@ for i, msg in enumerate(history):
                     else ""
                 )
 
+                rel_note = (
+                    " · relevance unclear"
+                    if extra.get("relevance_ok") is False
+                    else ""
+                )
+
                 if status == "VERIFIED" and sources:
                     st.markdown(
-                        f'<div class="status-verified">VERIFIED · {len(sources)} sources{mt}{provider_tag}</div>',
+                        f'<div class="status-verified">VERIFIED · {len(sources)} sources{mt}{rel_note}{provider_tag}</div>',
+                        unsafe_allow_html=True,
+                    )
+                elif status == "PARTIAL" and sources:
+                    st.markdown(
+                        f'<div class="status-partial">PARTIAL · {len(sources)} sources{mt}{rel_note}{provider_tag}</div>',
                         unsafe_allow_html=True,
                     )
                 elif status == "LIMITED" and sources:
@@ -608,7 +622,7 @@ for i, msg in enumerate(history):
                         )
 
                 # debug_payload: only present on LIMITED / trimmed-retry /
-                # low-match-ratio messages (Option C) — shows the raw
+                # low-match-ratio / relevance-unclear messages — shows the raw
                 # decision trail (classifier, provider, untrimmed snippets,
                 # trim/retry flag, match ratio) for exactly the cases worth
                 # scrutinizing.
@@ -629,6 +643,10 @@ for i, msg in enumerate(history):
                         )
                         st.markdown(
                             f'<span class="tavily-usage">match: {debug.get("match")}</span>',
+                            unsafe_allow_html=True,
+                        )
+                        st.markdown(
+                            f'<span class="tavily-usage">status_reason: {_html_escape(debug.get("status_reason"))}</span>',
                             unsafe_allow_html=True,
                         )
                         st.markdown(
@@ -1014,6 +1032,14 @@ if prompt:
                 if m
                 else "verified",
             )
+        elif result["status"] == "PARTIAL":
+            m = result.get("match")
+            st.session_state.cat_state = (
+                "done",
+                f"partly verified · {m['matched']} of {m['total']} facts matched"
+                if m
+                else "partly verified",
+            )
         elif result["status"] == "LIMITED":
             st.session_state.cat_state = ("limited", "limited confidence")
         else:
@@ -1022,9 +1048,9 @@ if prompt:
         st.write(reply.replace("$", "\\$"))
 
     # --- debug_payload (Option C): only build/store it for the cases worth
-    # scrutinizing — LIMITED status, a trimmed/retried request, or a low
-    # fact-match ratio. Normal VERIFIED answers get no debug_payload at all,
-    # keeping Supabase rows light.
+    # scrutinizing — LIMITED status, a trimmed/retried request, a low
+    # fact-match ratio, or unclear relevance. Normal VERIFIED answers get no
+    # debug_payload at all, keeping Supabase rows light.
     match = result.get("match")
     low_match = (
         match is not None
@@ -1043,6 +1069,7 @@ if prompt:
         or low_match
         or list_padded
         or result.get("items_removed")
+        or result.get("relevance_ok") is False
     )
 
     debug_payload = None
@@ -1054,6 +1081,7 @@ if prompt:
             "trimmed_retry": result.get("trimmed_retry", False),
             "match": match,
             "status": result.get("status"),
+            "status_reason": result.get("status_reason"),
             "model_found_nothing_useful": result.get(
                 "model_found_nothing_useful"
             ),
@@ -1072,6 +1100,7 @@ if prompt:
             "provider": search_provider,
             "error": result.get("error", False),
             "match": result.get("match"),
+            "relevance_ok": result.get("relevance_ok"),
             "debug_payload": debug_payload,
         },
     )
