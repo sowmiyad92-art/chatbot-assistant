@@ -568,10 +568,10 @@ for i, msg in enumerate(history):
         )
         st.write(msg["content"].replace("$", "\\$"))
 
-        if role == "assistant":                    # 8 spaces
-            extra = db.get_message_meta(msg)       # 12 spaces)
+                if role == "assistant":                    # 8 spaces
+            extra = db.get_message_meta(msg)       # 12 spaces
 
-                        if extra:                              # 12 spaces  <- must match the line above
+            if extra:                              # 12 spaces  <- must match the line above
                 status = extra.get("status")       # 16 spaces
                 sources = extra.get("sources")
                 provider_tag = (
