@@ -571,7 +571,7 @@ for i, msg in enumerate(history):
         if role == "assistant":
             extra = db.get_message_meta(msg)
 
-            if extra:
+                        if extra:
                 status = extra.get("status")
                 sources = extra.get("sources")
                 provider_tag = (
