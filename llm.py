@@ -479,7 +479,7 @@ def get_response(
         for phrase in _NO_USEFUL_DATA_PHRASES
     )
 
-        match = _match_facts(text, search_results, latest_query)
+    match = _match_facts(text, search_results, latest_query)
     relevant = _relevant(latest_query, search_results) if search_results else False
     ratio = (
         match["matched"] / match["total"]
