@@ -493,9 +493,9 @@ def get_response(
         status, reason = "LIMITED", "no_useful_phrase"
     elif len(search_results) < 2:
         status, reason = "LIMITED", "single_source"
-    elif ratio < 0.75:
+    elif ratio < 0.6:
         status, reason = "LIMITED", "low_match"
-    elif ratio < 1.0:
+    elif ratio < 0.85:
         status, reason = "PARTIAL", "some_facts_unmatched"
     else:
         status, reason = "VERIFIED", "ok"
