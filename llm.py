@@ -479,27 +479,34 @@ def get_response(
         for phrase in _NO_USEFUL_DATA_PHRASES
     )
 
-    match = _match_facts(text, search_results, latest_query)
-    ratio_ok = (
-        match is not None
-        and match["total"] >= 2
-        and match["matched"] / match["total"] >= 0.75
+        match = _match_facts(text, search_results, latest_query)
+    relevant = _relevant(latest_query, search_results) if search_results else False
+    ratio = (
+        match["matched"] / match["total"]
+        if match and match["total"] >= 2
+        else 0
     )
-    ratio_ok = ratio_ok and _relevant(latest_query, search_results)
 
     if not search_results:
-        status = "NONE"
+        status, reason = "NONE", "no_search_results"
     elif model_found_nothing_useful:
-        status = "LIMITED"
-    elif len(search_results) >= 2 and ratio_ok:
-        status = "VERIFIED"
+        status, reason = "LIMITED", "no_useful_phrase"
+    elif len(search_results) < 2:
+        status, reason = "LIMITED", "single_source"
+    elif ratio < 0.75:
+        status, reason = "LIMITED", "low_match"
+    elif ratio < 1.0:
+        status, reason = "PARTIAL", "some_facts_unmatched"
     else:
-        status = "LIMITED"
+        status, reason = "VERIFIED", "ok"
 
     return {
         "text": text,
         "sources": search_results,
         "status": status,
+        "status_reason": reason,
+        "relevance_ok": relevant,
+        "model_found_nothing_useful": bool(model_found_nothing_useful),
         "model": model,
         "match": match,
     }
