@@ -5,6 +5,7 @@ import db
 import llm
 import search
 import youtube
+from learn import render_learn_mode  # NEW
 
 try:
     import kb_search
@@ -408,7 +409,11 @@ with st.sidebar:
         new_id = db.create_session("New chat")
         st.session_state.current_session_id = new_id
         st.query_params["session_id"] = str(new_id)
+        st.session_state.learn_open = False  # NEW: leave learn mode on new session
         st.rerun()
+
+    if st.button("🎓 Learn", key="learn_btn", use_container_width=True):  # NEW
+        st.session_state.learn_open = True  # NEW
 
     sessions = db.get_sessions()
     visible_sessions = (
@@ -532,9 +537,15 @@ with st.sidebar:
                 use_container_width=True,
             ):
                 st.session_state.pending_query = tq["query"]
+                st.session_state.learn_open = False  # NEW: back to chat for the query
                 st.rerun()
     except Exception as e:
         st.caption(f"frequent queries unavailable ({e})")
+
+# ---------- Learn mode (renders instead of chat) ----------
+if st.session_state.get("learn_open"):  # NEW
+    render_learn_mode()  # NEW
+    st.stop()  # NEW
 
 # ---------- Main chat area ----------
 if "cat_state" not in st.session_state:
