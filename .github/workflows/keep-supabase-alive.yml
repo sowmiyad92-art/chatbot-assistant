@@ -1,0 +1,22 @@
+name: Keep Supabase alive
+on:
+  schedule:
+    - cron: "0 3 */3 * *"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call RPC functions on Supabase
+        env:
+          KB_SUPABASE_URL: ${{ secrets.KB_SUPABASE_URL }}
+          KB_SUPABASE_KEY: ${{ secrets.KB_SUPABASE_KEY }}
+        run: |
+          for fn in random_doc_chunk random_code_chunk; do
+            curl --fail -sS -o /dev/null -X POST \
+              -H "apikey: $KB_SUPABASE_KEY" \
+              -H "Authorization: Bearer $KB_SUPABASE_KEY" \
+              -H "Content-Type: application/json" -d '{}' \
+              "$KB_SUPABASE_URL/rest/v1/rpc/$fn"
+            echo "$fn OK"
+          done
