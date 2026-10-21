@@ -9,11 +9,11 @@ jobs:
     steps:
       - name: Query code-knowledge-base
         env:
-          CODEKB_URL: ${{ secrets.CODEKB_SUPABASE_URL }}
-          CODEKB_KEY: ${{ secrets.CODEKB_SUPABASE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
           curl --fail -sS -o /dev/null \
-            -H "apikey: $CODEKB_KEY" \
-            -H "Authorization: Bearer $CODEKB_KEY" \
-            "$CODEKB_URL/rest/v1/YOUR_TABLE?select=*&limit=1"
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY" \
+            "$SUPABASE_URL/rest/v1/YOUR_TABLE?select=*&limit=1"
           echo "ping OK"
