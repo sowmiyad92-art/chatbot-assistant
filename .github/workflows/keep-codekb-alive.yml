@@ -9,8 +9,8 @@ jobs:
     steps:
       - name: Query code_chunks on Supabase
         env:
-          SUPABASE_URL: ${{ secrets.CODEKB_SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.CODEKB_SUPABASE_KEY }}
+          SUPABASE_URL: ${{ secrets.KB_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.KB_SUPABASE_KEY }}
         run: |
           curl --fail -sS -o /dev/null \
             -H "apikey: $SUPABASE_KEY" \
