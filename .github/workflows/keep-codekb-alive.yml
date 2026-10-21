@@ -15,5 +15,5 @@ jobs:
           curl --fail -sS -o /dev/null \
             -H "apikey: $SUPABASE_KEY" \
             -H "Authorization: Bearer $SUPABASE_KEY" \
-            "$SUPABASE_URL/rest/v1/YOUR_TABLE?select=*&limit=1"
+            "$SUPABASE_URL/rest/v1/lesmtujkjoqrxaczqsul?select=*&limit=1"
           echo "ping OK"
