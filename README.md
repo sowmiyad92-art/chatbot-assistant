@@ -2,7 +2,7 @@
 
 A personal AI assistant built with Streamlit and Groq. Every web-grounded answer shows its sources and a fact-match badge, so you can see how much of the answer the sources actually support.
 
-**Live app:** <!-- add Streamlit Cloud link -->
+
 
 ## How it works
 
