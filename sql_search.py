@@ -1,12 +1,13 @@
 """
 sql_search.py — SQL / IMDb search for Aadsia
 Runs a LangGraph SQL agent (pandas lookup tool + SQLDatabaseToolkit) against
-the local IMDb dataset. Returns an answer + which tools were used, mirroring
+the IMDb dataset. Returns an answer + which tools were used, mirroring
 kb_search.py's ask_kb() entry-point shape.
 """
 
 import os
 from typing import Optional
+from urllib.parse import quote
 
 import pandas as pd
 from pydantic import BaseModel, Field
@@ -15,13 +16,25 @@ from langchain_groq import ChatGroq
 from langgraph.prebuilt import create_react_agent
 from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 from langchain_community.utilities import SQLDatabase
+from sqlalchemy import create_engine
 
 # ============================================================================
-# CONSTANTS
+# CONSTANTS & DB UTILS
 # ============================================================================
 
 DEFAULT_MIN_VOTES = 10000
 DATASET_NOTE = "\n\n_Results come from the filtered IMDb dataset (2000–2024, ~30k titles), not all of IMDb._"
+
+
+def _db_url():
+    raw = os.getenv("IMDB_DATABASE_URL")
+    if not raw:
+        raise ValueError("IMDB_DATABASE_URL not set")
+    _, rest = raw.split("://", 1)
+    creds, host = rest.rsplit("@", 1)
+    user, pw = creds.split(":", 1)
+    return f"postgresql://{user}:{quote(pw, safe='')}@{host}"
+
 
 # ============================================================================
 # LAZY-LOADED SINGLETONS (mirrors kb_search.py's pattern)
@@ -30,13 +43,21 @@ DATASET_NOTE = "\n\n_Results come from the filtered IMDb dataset (2000–2024, ~
 _sql_agent = None
 _imdb_df = None
 
+_COLS = {
+    "primarytitle": "primaryTitle",
+    "startyear": "startYear",
+    "numvotes": "numVotes",
+    "averagerating": "averageRating"
+}
+
 
 def get_imdb_df():
     global _imdb_df
     if _imdb_df is None:
-        _imdb_df = pd.read_csv("data/imdb_filtered_2000_2024.csv")
-        _imdb_df["startYear"] = _imdb_df["startYear"].fillna(0).astype(int)
-        _imdb_df["numVotes"] = _imdb_df["numVotes"].fillna(0).astype(int)
+        df = pd.read_sql("select * from imdb_titles", create_engine(_db_url())).rename(columns=_COLS)
+        df["startYear"] = df["startYear"].fillna(0).astype(int)
+        df["numVotes"] = df["numVotes"].fillna(0).astype(int)
+        _imdb_df = df
     return _imdb_df
 
 
@@ -110,7 +131,7 @@ def get_sql_agent_cached():
         if not api_key:
             raise ValueError("GROQ_API_KEY not set")
 
-        db = SQLDatabase.from_uri("sqlite:///data/imdb.db")
+        db = SQLDatabase.from_uri(_db_url(), include_tables=["imdb_titles"])
         sql_llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0, api_key=api_key)
         sql_tools = SQLDatabaseToolkit(db=db, llm=sql_llm).get_tools()
 
