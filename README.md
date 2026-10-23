@@ -13,23 +13,23 @@ Ask a question and the Auto router picks a path: YouTube API, SQL agent (IMDb da
 ## Screenshots
 
 <p align="center">
-  <img src="docs/images/verified.png" width="48%" alt="Verified answer via Exa">
-  <img src="docs/images/partial.png" width="48%" alt="Partial match badge">
+  <img src="verified.png" width="48%" alt="Verified answer via Exa">
+  <img src="partial.png" width="48%" alt="Partial match badge">
 </p>
 <p align="center">
   <sub><b>VERIFIED:</b> 9 of 9 facts matched across 4 sources &nbsp;·&nbsp; <b>PARTIAL:</b> 5 of 6 facts matched</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/sql.png" width="48%" alt="SQL agent on IMDb dataset">
-  <img src="docs/images/digest.png" width="30%" alt="Daily digest in Telegram">
+  <img src="sql.png" width="48%" alt="SQL agent on IMDb dataset">
+  <img src="digest.png" width="30%" alt="Daily digest in Telegram">
 </p>
 <p align="center">
   <sub><b>SQL agent:</b> IMDb questions answered from the dataset, with honest "no results" &nbsp;·&nbsp; <b>Daily digest</b> in Telegram</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/learn.png" width="60%" alt="Learn mode: practice questions from docs or code">
+  <img src="learn.png" width="60%" alt="Learn mode: practice questions from docs or code">
 </p>
 <p align="center">
   <sub><b>Learn mode:</b> practice questions from the docs or code KB, with the source chunk shown</sub>
