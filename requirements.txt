@@ -18,5 +18,5 @@ langgraph
 langchain-community
 pandas
 sqlalchemy
-psycopg2-binary
+
 
